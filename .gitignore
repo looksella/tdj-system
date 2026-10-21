@@ -1,0 +1,41 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# dependencies
+/node_modules
+# SPEC_FLY_NODE_MODULES_OVERLAY: el entrypoint Fly (docker-entrypoint-fly.sh)
+# monta node_modules vía OverlayFS y crea estos directorios scratch DENTRO del
+# workdir-repo: .nm_upper (delta writable, incl. binarios de Prisma ~65MB c/u) y
+# .nm_work (work dir interno de OverlayFS). Sin ignorarlos, `git add -A` los
+# stagea → el commit del agente se infla con MB → push rechazado GH001 (>100MB)
+# → el trabajo no llega a GitHub → resume + reset --hard lo borra. Causa raíz del
+# 26.7% de runs con pérdida de trabajo (diagnóstico 2026-06-08).
+/.nm_upper/
+/.nm_work/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+# testing
+/coverage
+# next.js
+/.next/
+/out/
+# production
+/build
+# misc
+.DS_Store
+*.pem
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+# env files (can opt-in for committing if needed)
+.env*
+# vercel
+.vercel
+# typescript
+*.tsbuildinfo
+next-env.d.ts

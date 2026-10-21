@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+model Categoria {
+  id                String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryName      String     @map("category_name")
+  itemsSold         Int        @default(0) @map("items_sold")
+  totalQuantitySold Int        @default(0) @map("total_quantity_sold")
+  totalRevenue      Decimal    @default(0) @db.Decimal(12, 2) @map("total_revenue")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @default(now()) @map("updated_at")
+  products          Producto[]
+  @@map("categorias")
+}
+model Producto {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sku              String            @unique
+  name             String
+  description      String?
+  categoryId       String?           @db.Uuid @map("category_id")
+  purchasePrice    Decimal           @default(0) @db.Decimal(12, 2) @map("purchase_price")
+  salePrice        Decimal           @default(0) @db.Decimal(12, 2) @map("sale_price")
+  currentStock     Int               @default(0) @map("current_stock")
+  minStock         Int               @default(0) @map("min_stock")
+  imageUrl         String?           @map("image_url")
+  isActive         Boolean           @default(true) @map("is_active")
+  hasExpiry        Boolean           @default(false) @map("has_expiry")
+  expiryDate       DateTime?          @map("expiry_date")
+  priceIncludesTax Boolean           @default(false) @map("price_includes_tax")
+  createdBy        String?           @map("created_by")
+  updatedBy        String?           @map("updated_by")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @default(now()) @map("updated_at")
+  category         Categoria?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  stockMovements   MovimientoStock[]
+  saleLines        LineaVenta[]
+  purchaseLines    LineaCompra[]
+  supplierPrices   PrecioProveedor[]
+  @@index([categoryId])
+  @@index([currentStock, minStock])
+  @@map("productos")
+}
+model MovimientoStock {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId String   @db.Uuid @map("product_id")
+  delta     Int
+  reason    String
+  reference String?
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @default(now()) @map("updated_at")
+  product   Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@index([productId, createdAt])
+  @@map("movimientos_stock")
+}
+model Cliente {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  phone     String?
+  email     String?
+  notes     String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @default(now()) @map("updated_at")
+  sales     Venta[]
+  @@index([name])
+  @@map("clientes")
+}
+model Proveedor {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @unique
+  contactName  String?  @map("contact_name")
+  phone        String?
+  email        String?
+  taxId        String?  @map("tax_id")
+  address      String?
+  paymentTerms String?  @map("payment_terms")
+  notes        String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @default(now()) @map("updated_at")
+  prices       PrecioProveedor[]
+  @@index([name])
+  @@map("proveedores")
+}
+model PrecioProveedor {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supplierId      String    @db.Uuid @map("supplier_id")
+  productId       String    @db.Uuid @map("product_id")
+  unitCost        Decimal   @db.Decimal(12, 2) @map("unit_cost")
+  minimumQuantity Int       @default(1) @map("minimum_quantity")
+  note            String?
+  quotedAt        DateTime  @default(now()) @map("quoted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @default(now()) @map("updated_at")
+  supplier        Proveedor @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product         Producto  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([supplierId, productId])
+  @@index([productId, unitCost])
+  @@map("precios_proveedor")
+}
+model Venta {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  number        Int          @unique @default(autoincrement())
+  customerId    String?      @db.Uuid @map("customer_id")
+  total         Decimal      @db.Decimal(12, 2)
+  paymentMethod String       @map("payment_method")
+  source        String       @default("mostrador")
+  status        String       @default("completada")
+  note          String?
+  soldAt        DateTime     @default(now()) @map("sold_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @default(now()) @map("updated_at")
+  customer      Cliente?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  lines         LineaVenta[]
+  @@index([soldAt, status])
+  @@map("ventas")
+}
+model LineaVenta {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  saleId    String   @db.Uuid @map("sale_id")
+  productId String   @db.Uuid @map("product_id")
+  quantity  Int
+  unitPrice Decimal  @db.Decimal(12, 2) @map("unit_price")
+  lineTotal Decimal  @db.Decimal(12, 2) @map("line_total")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @default(now()) @map("updated_at")
+  sale      Venta    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product   Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@index([saleId])
+  @@index([productId])
+  @@map("lineas_venta")
+}
+model Compra {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  number       Int           @unique @default(autoincrement())
+  supplierName String        @map("supplier_name")
+  reference    String?
+  note         String?
+  total        Decimal       @db.Decimal(12, 2)
+  purchasedAt  DateTime      @default(now()) @map("purchased_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @default(now()) @map("updated_at")
+  lines        LineaCompra[]
+  @@index([purchasedAt])
+  @@index([supplierName])
+  @@map("compras")
+}
+model LineaCompra {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  purchaseId  String   @db.Uuid @map("purchase_id")
+  productId   String   @db.Uuid @map("product_id")
+  quantity    Int
+  unitCost    Decimal  @db.Decimal(12, 2) @map("unit_cost")
+  lineTotal   Decimal  @db.Decimal(12, 2) @map("line_total")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @default(now()) @map("updated_at")
+  purchase    Compra   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product     Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@index([purchaseId])
+  @@index([productId])
+  @@map("lineas_compra")
+}

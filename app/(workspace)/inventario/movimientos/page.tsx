@@ -1,0 +1,22 @@
+import Link from "next/link";
+import { ArrowDownLeft, ArrowUpRight, ClipboardList } from "lucide-react";
+import { db } from "@/lib/db";
+import { formatDateTime } from "@/lib/locale";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+export const dynamic = "force-dynamic";
+const PAGE_SIZE = 20;
+const reasonLabels: Record<string, string> = { venta: "Venta", anulacion: "Anulación de venta", ajuste: "Ajuste manual", compra: "Compra", devolucion: "Devolución" };
+export default async function StockMovementsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const params = await searchParams;
+  const page = Math.max(1, Number(params.page) || 1);
+  const [movements, count] = await Promise.all([
+    db.movimientoStock.findMany({ orderBy: { createdAt: "desc" }, take: PAGE_SIZE, skip: (page - 1) * PAGE_SIZE, include: { product: { select: { name: true, sku: true } } } }),
+    db.movimientoStock.count(),
+  ]);
+  const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
+  return <div className="space-y-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">Control de existencias</p><h1 className="display-heading text-4xl font-semibold">Movimientos</h1><p className="mt-2 text-muted-foreground">Cada cambio registrado explica por qué aumentó o bajó el inventario.</p></div><Button asChild variant="outline" className="rounded-xl"><Link href="/inventario" prefetch={false}>Volver al inventario</Link></Button></div>
+    {movements.length ? <Card className="panel-shadow overflow-hidden"><CardHeader className="border-b"><CardTitle className="display-heading text-xl">Historial · {count} movimientos</CardTitle></CardHeader><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Producto</TableHead><TableHead>Motivo</TableHead><TableHead>Detalle</TableHead><TableHead>Fecha</TableHead><TableHead className="text-right">Cambio</TableHead></TableRow></TableHeader><TableBody>{movements.map((movement) => <TableRow key={movement.id}><TableCell><p className="font-semibold">{movement.product.name}</p><p className="text-xs text-muted-foreground">{movement.product.sku}</p></TableCell><TableCell><Badge variant="secondary">{reasonLabels[movement.reason] ?? movement.reason}</Badge></TableCell><TableCell className="max-w-56 text-muted-foreground">{movement.note || movement.reference || "—"}</TableCell><TableCell className="whitespace-nowrap text-sm text-muted-foreground">{formatDateTime(movement.createdAt)}</TableCell><TableCell className={`text-right font-bold tabular-nums ${movement.delta > 0 ? "text-emerald-700" : "text-destructive"}`}><span className="inline-flex items-center justify-end gap-1">{movement.delta > 0 ? <ArrowUpRight className="size-4" /> : <ArrowDownLeft className="size-4" />}{movement.delta > 0 ? "+" : ""}{movement.delta}</span></TableCell></TableRow>)}</TableBody></Table></div><div className="flex items-center justify-between border-t px-4 py-3 text-sm"><span className="text-muted-foreground">Página {page} de {pageCount}</span><div className="flex gap-2"><Button asChild size="sm" variant="outline" disabled={page <= 1}><Link prefetch={false} href={`/inventario/movimientos?page=${Math.max(1, page - 1)}`}>Anterior</Link></Button><Button asChild size="sm" variant="outline" disabled={page >= pageCount}><Link prefetch={false} href={`/inventario/movimientos?page=${Math.min(pageCount, page + 1)}`}>Siguiente</Link></Button></div></div></Card> : <Card className="border-dashed"><CardContent className="flex min-h-72 flex-col items-center justify-center p-8 text-center"><span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-secondary text-primary"><ClipboardList className="size-7" /></span><h2 className="display-heading text-2xl">Todavía no hay movimientos</h2><p className="mt-2 max-w-md text-sm text-muted-foreground">Tus productos se cargaron como saldo inicial. A partir de las primeras ventas y ajustes, cada cambio aparecerá aquí con su motivo.</p><Button asChild className="mt-5 rounded-xl"><Link href="/ventas" prefetch={false}>Registrar una venta</Link></Button></CardContent></Card>}</div>;
+}
