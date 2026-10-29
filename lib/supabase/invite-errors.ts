@@ -97,10 +97,7 @@ export function mapSupabaseInviteError(raw: string): string {
   return mapSupabaseAuthError(raw, "invitacion");
 }
 /**
- * SPEC_LOGIN_APPS_FUERZA_BRUTA Bloque 2 — lo mínimo que acepta GoTrue al
- * elegir contraseña. Un test compara este número con el que la plataforma le
- * configura al proyecto de Supabase: si divergen, la pantalla vuelve a pedir
- * menos de lo que el servidor exige.
+ * Minimum password length checked before sending a password to Supabase Auth.
  */
 export const PASSWORD_MIN_LENGTH = 8;
 /**
@@ -150,44 +147,5 @@ export function mapSupabaseResetError(
       return at.errores.passwordIgual;
     default:
       return at.reset.errorGenerico;
-  }
-}
-/**
- * Lo que contesta `POST /api/admin/bootstrap` en `code` cuando falla. Unión
- * cerrada: el bootstrap solo puede devolver uno de estos, y `/setup` decide
- * por él (el `error` de la respuesta es texto, para los `/setup` viejos).
- */
-export type CodigoBootstrap =
-  | "token_invalid"
-  | "datos_invalidos"
-  | "faltan_datos"
-  | "password_debil"
-  | "password_filtrada"
-  | "setup_completado"
-  | "supabase";
-/** El texto de `/setup` para un fallo del bootstrap. Sin código → genérico. */
-export function mensajeDeBootstrap(code: CodigoBootstrap | undefined): string {
-  switch (code) {
-    case "token_invalid":
-      return at.setup.linkInvalido;
-    case "password_debil":
-      return at.errores.passwordDebil;
-    case "password_filtrada":
-      return at.errores.passwordFiltrada;
-    case "setup_completado":
-      return at.api.setupYaCompletado;
-    case "faltan_datos":
-      return at.api.faltaEmailOPassword;
-    case "datos_invalidos":
-    case "supabase":
-    case undefined:
-      return at.setup.errorGenerico;
-    default: {
-      // `code` viene de la red: un bootstrap futuro (plomería, se pisa) puede
-      // mandar un código que este /setup (pantalla, no se pisa) no conoce.
-      const exhaustivo: never = code;
-      void exhaustivo;
-      return at.setup.errorGenerico;
-    }
   }
 }

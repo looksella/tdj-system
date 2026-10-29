@@ -1,13 +1,4 @@
 "use client";
-// ============================================================
-// PLATFORM FILE — components/beon/asistente-chat.tsx
-// Generado e inyectado por TuSistema. NO editar ni reescribir.
-// La parte interactiva del módulo "Asistente IA". Solo Tailwind
-// del scaffold: no importa nada de la app para que el módulo no
-// se rompa cuando el sistema cambia. Lo único que importa es otro
-// archivo de PLATAFORMA (`lib/beon-idioma.ts`), que la plataforma
-// restaura en cada commit y el agente no edita.
-// ============================================================
 import { useEffect, useRef, useState } from "react";
 import { idiomaDelNegocio } from "@/lib/beon-idioma";
 type Kind = "data" | "system" | "derived";
@@ -22,7 +13,7 @@ type Respuesta =
       truncated: boolean;
       empty: boolean;
     }
-  | { ok: false; code: string; message: string; creditsUrl?: string };
+  | { ok: false; code: string; message: string };
 type Turno =
   | { rol: "yo"; texto: string }
   | { rol: "sistema"; texto: string; fuente?: string };
@@ -35,15 +26,14 @@ const COPY = {
     placeholder: "Escribí tu pregunta…",
     enviar: "Preguntar",
     pensando: "Pensando…",
-    costo: (n: string) => `Cada pregunta usa ≈ ${n} créditos de tu plan.`,
+    costo: (n: string) => `Cada pregunta usa ≈ ${n} créditos del servicio configurado.`,
     basadoEn: (tablas: string) => `Basado en: ${tablas}`,
     vacio: "No encontré registros con ese filtro. ¿Querés que busque de otra forma?",
     derivado:
-      "Puedo responder preguntas sobre los datos de tu sistema y sobre cómo funciona. Eso otro lo podés pedir desde el chat de TuSistema.",
+      "Puedo responder preguntas sobre los datos de tu sistema y sobre cómo funciona.",
     apagado:
-      "El asistente está desactivado. Se vuelve a activar desde la configuración del sistema en TuSistema.",
-    sinCreditos: "El dueño del sistema se quedó sin créditos en TuSistema.",
-    cargarCreditos: "Cargar créditos",
+      "El asistente está desactivado o no tiene un servicio configurado.",
+    sinCreditos: "El servicio del asistente no tiene saldo disponible. Revisa su configuración.",
     limpiar: "Empezar de nuevo",
     error: "No pudimos consultar tu sistema. Probá de nuevo en un momento.",
   },
@@ -55,15 +45,14 @@ const COPY = {
     placeholder: "Escreva sua pergunta…",
     enviar: "Perguntar",
     pensando: "Pensando…",
-    costo: (n: string) => `Cada pergunta usa ≈ ${n} créditos do seu plano.`,
+    costo: (n: string) => `Cada pergunta usa ≈ ${n} créditos do serviço configurado.`,
     basadoEn: (tablas: string) => `Com base em: ${tablas}`,
     vacio: "Não encontrei registros com esse filtro. Quer que eu busque de outro jeito?",
     derivado:
-      "Posso responder perguntas sobre os dados do seu sistema e sobre como ele funciona. Isso outro você pode pedir no chat do TeuSistema.",
+      "Posso responder perguntas sobre os dados do seu sistema e sobre como ele funciona.",
     apagado:
-      "O assistente está desativado. Ele volta a ficar ativo na configuração do sistema, no TeuSistema.",
-    sinCreditos: "O dono do sistema ficou sem créditos no TeuSistema.",
-    cargarCreditos: "Carregar créditos",
+      "O assistente está desativado ou não tem um serviço configurado.",
+    sinCreditos: "O serviço do assistente está sem saldo disponível. Confira a configuração.",
     limpiar: "Começar de novo",
     error: "Não conseguimos consultar seu sistema. Tente de novo em um instante.",
   },
@@ -71,7 +60,7 @@ const COPY = {
 // El hilo vive en el navegador del dueño. No es un chat con memoria: es que
 // salir de la pantalla y volver no te borre lo que preguntaste hace un minuto.
 //
-// `localStorage` y no la plataforma a propósito: resuelve el caso real (salir y
+// `localStorage` resuelve el caso real (salir y
 // volver, recargar, cerrar y abrir) sin una tabla nueva ni una llamada más en
 // cada carga. Lo que NO cubre es verlo desde otro dispositivo.
 const HILO_KEY = "beon:asistente:hilo";
@@ -97,8 +86,7 @@ function guardarHilo(turnos: Turno[]): void {
     // funcionamiento.
   }
 }
-/** El idioma sale del NEGOCIO, no del navegador de quien mira: el mismo
- *  criterio que el resto de la capa de plataforma (`lib/beon-idioma.ts`).
+/** El idioma sale de la configuración del negocio, no del navegador de quien mira.
  *
  *  Mirar el idioma del navegador le mostraba el asistente en castellano al dueño
  *  brasileño que tiene la computadora en inglés, y en portugués a un empleado
@@ -110,9 +98,6 @@ function guardarHilo(turnos: Turno[]): void {
  *  Eso además borra el flash de castellano que tenía la versión con
  *  `useEffect`, que arrancaba en `es` y recién después se corregía. */
 function usarCopy() {
-  // La anotación explícita no es ceremonia: este archivo también lo typechequea
-  // el repo de la plataforma, donde el alias `@/` apunta a otro lado y el
-  // import resuelve a `any`. Sin ella, indexar `COPY` sería un `any` implícito.
   const idioma: "es" | "pt" = idiomaDelNegocio();
   return { copy: COPY[idioma], locale: idioma };
 }
@@ -134,7 +119,7 @@ export function AsistenteChat({
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [hiloCargado, setHiloCargado] = useState(false);
   const [enviando, setEnviando] = useState(false);
-  const [aviso, setAviso] = useState<{ texto: string; url?: string } | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   // El aviso de "sin créditos" se arma con el copy YA resuelto y no con una
   // copia en el estado inicial: así sigue el idioma del negocio aunque el
   // componente se vuelva a montar.
@@ -142,7 +127,7 @@ export function AsistenteChat({
     aviso ??
     (ownerHasCredits
       ? null
-      : { texto: copy.sinCreditos, url: "https://tusistema.ai/creditos" });
+      : copy.sinCreditos);
   const finRef = useRef<HTMLDivElement>(null);
   // El hilo de antes. Va en un efecto y no en el estado inicial porque el
   // servidor no tiene `localStorage`: leerlo en el render inicial daría un
@@ -157,8 +142,7 @@ export function AsistenteChat({
     // del primer render.
     if (hiloCargado) guardarHilo(turnos);
   }, [turnos, hiloCargado]);
-  // `?q=` precarga la pregunta SIN enviarla: el botón del chat de TuSistema
-  // sugiere, y el dueño decide si la manda (y si gasta el crédito).
+  // `?q=` precarga la pregunta sin enviarla.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("q");
     if (q) setPregunta(q);
@@ -189,7 +173,7 @@ export function AsistenteChat({
       });
       const data = (await res.json()) as Respuesta;
       if (!data.ok) {
-        setAviso({ texto: data.message || copy.error, url: data.creditsUrl });
+        setAviso(data.message || copy.error);
         return;
       }
       if (data.kind === "derived") {
@@ -216,7 +200,7 @@ export function AsistenteChat({
         { rol: "sistema", texto: data.answer || copy.error, fuente },
       ]);
     } catch {
-      setAviso({ texto: copy.error });
+      setAviso(copy.error);
     } finally {
       setEnviando(false);
     }
@@ -288,17 +272,7 @@ export function AsistenteChat({
       </div>
       {avisoVisible ? (
         <p className="rounded-lg border border-black/10 px-3 py-2 text-sm">
-          {avisoVisible.texto}{" "}
-          {avisoVisible.url ? (
-            <a
-              href={avisoVisible.url}
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              {copy.cargarCreditos}
-            </a>
-          ) : null}
+          {avisoVisible}
         </p>
       ) : null}
       <form

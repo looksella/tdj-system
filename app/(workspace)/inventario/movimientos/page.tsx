@@ -5,11 +5,13 @@ import { formatDateTime } from "@/lib/locale";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requirePagePermission } from "@/lib/require-page-permission";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
 const reasonLabels: Record<string, string> = { venta: "Venta", anulacion: "Anulación de venta", ajuste: "Ajuste manual", compra: "Compra", devolucion: "Devolución" };
 export default async function StockMovementsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  await requirePagePermission("inventory:manage");
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
   const [movements, count] = await Promise.all([

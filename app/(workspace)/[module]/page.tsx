@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { BarChart3, FileText, HandCoins, Tags, Truck, Users, Boxes } from "lucide-react";
 import { ModulePlaceholder } from "@/components/workspace/module-placeholder";
+import { requirePagePermission } from "@/lib/require-page-permission";
 const modules = {
   compras: { title: "Compras y abastecimiento", intro: "Registra las entradas de mercadería y consulta cuánto compraste, cuándo llegó y qué productos reforzaste.", benefits: ["Historial de recepciones por proveedor", "Entrada de unidades conectada al inventario", "Costos de compra para comparar reposiciones"], icon: Boxes },
   proveedores: { title: "Proveedores", intro: "Ten a mano contactos, condiciones de entrega y el historial de abastecimiento de cada proveedor.", benefits: ["Ficha con teléfono, notas y condiciones", "Últimas compras y montos asociados", "Historial conservado aunque cambie el proveedor"], icon: Truck },
@@ -11,6 +12,7 @@ const modules = {
   "precio-sugerido": { title: "Precio sugerido", intro: "Analiza costos y márgenes para ayudarte a definir precios sostenibles para los productos de tu catálogo.", benefits: ["Margen esperado por artículo", "Comparación entre costo y precio actual", "Sugerencias sencillas para revisar antes de aplicar"], icon: HandCoins },
 } satisfies Record<string, { title: string; intro: string; benefits: string[]; icon: typeof Boxes }>;
 export default async function PlaceholderPage({ params }: { params: Promise<{ module: string }> }) {
+  await requirePagePermission("business:manage");
   const { module } = await params;
   if (!(module in modules)) notFound();
   const content = modules[module as keyof typeof modules];

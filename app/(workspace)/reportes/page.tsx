@@ -4,9 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/locale";
+import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 const DAYS_TO_REVIEW = 30;
 export default async function ReportsPage() {
+  await requirePagePermission("reports:read");
   const since = new Date(Date.now() - DAYS_TO_REVIEW * 24 * 60 * 60 * 1000);
   const [sales, saleLines, lowStock, inventory, categoryPerformance] = await Promise.all([
     db.venta.findMany({

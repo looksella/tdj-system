@@ -1,6 +1,6 @@
 import { at } from "@/lib/auth-textos";
+import { isAllowed } from "@/lib/auth-helpers";
 import { createClient } from "@supabase/supabase-js";
-import { rechazoPorCupo } from "@/lib/supabase/cupo";
 import { LOGIN_ACTIVO } from "@/lib/supabase/estado";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
 import { mapSupabaseInviteError } from "@/lib/supabase/invite-errors";
@@ -9,11 +9,8 @@ export const dynamic = "force-dynamic";
 /**
  * Cliente admin (service role). SOLO server-side: bypassa RLS.
  *
- * Perezoso a propósito: `createClient` lanza si la URL es `undefined`, y Next
- * evalúa este módulo en "Collecting page data" durante `next build`. Con el
- * cliente a nivel de módulo, un deploy al que todavía no llegaron las env vars
- * de Supabase (auth horneada por la plataforma, primer publish antes del
- * provisioning) rompía el build entero. Acá se crea por request.
+ * Create the client per request so a missing environment variable does not
+ * prevent Next.js from collecting route data during the build.
  */
 function supabaseAdmin() {
   return createClient(
@@ -28,23 +25,9 @@ function supabaseAdmin() {
  * NO reutiliza el POST de alta: ese invita (crea el usuario) y acá la persona
  * ya existe, así que ese camino fallaría con "already registered".
  */
-/**
- * El login de este sistema todavía no está activo: la plataforma inyecta las
- * variables de Supabase recién al activarlo (hace falta un plan).
- *
- * Un 503 explícito y no una excepción: sin esto, `getEffectiveUser()` y
- * `supabaseAdmin()` construyen el cliente con
- * `process.env.NEXT_PUBLIC_SUPABASE_URL!` y tiran, o sea que la ruta devolvía
- * un 500 con un stack de Next adentro del sistema del dueño. El código
- * `login_inactivo` es para que quien consuma esta ruta pueda distinguir "no
- * está activo" de "se rompió".
- */
+/** Return 503 when Supabase is not configured instead of creating an invalid client. */
 function loginInactivo(): Response | null {
-  // `AUTH_ABIERTO` (el plan del dueño terminó, ver `lib/supabase/helpers.ts`)
-  // cierra esta ruta por el MISMO 503: con el sistema abierto todo visitante
-  // es admin, así que sin esto cualquiera podría listar —o crear— los usuarios
-  // del sistema. Las cuentas no se tocan; vuelven a administrarse con el plan.
-  if (LOGIN_ACTIVO && process.env.BEON_AUTH_MODE !== "open") return null;
+  if (LOGIN_ACTIVO) return null;
   return Response.json(
     { error: "login_inactivo" },
     { status: 503, headers: { "Cache-Control": "no-store" } },
@@ -54,13 +37,9 @@ export async function POST(request: Request) {
   const inactivo = loginInactivo();
   if (inactivo) return inactivo;
   const user = await getEffectiveUser();
-  if (!user || user.role !== "admin") {
+  if (!user || !isAllowed(user.role, "users:manage")) {
     return new Response("Forbidden", { status: 403 });
   }
-  // El mismo tope que el alta: sin plan entra solo el dueño, y un link nuevo
-  // es una puerta más. Sin respuesta de la plataforma no se genera.
-  const sinCupo = await rechazoPorCupo();
-  if (sinCupo) return sinCupo;
   const { email } = await request.json();
   const origin = new URL(request.url).origin;
   const { data: listData, error: listError } =
@@ -73,6 +52,12 @@ export async function POST(request: Request) {
     return Response.json(
       { error: at.api.personaNoEncontrada },
       { status: 400 },
+    );
+  }
+  if (target.app_metadata?.role === "developer") {
+    return Response.json(
+      { error: "La cuenta de desarrolladora está protegida." },
+      { status: 403 },
     );
   }
   // El gate mira el HECHO de haber elegido contraseña, no `last_sign_in_at`:

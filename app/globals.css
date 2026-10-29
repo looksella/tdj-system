@@ -123,4 +123,14 @@
 @layer components {
   .panel-shadow { box-shadow: var(--shadow); }
   .display-heading { font-family: var(--font-app-display), serif; }
+  /* Encabezado chico de tarjeta (turno, caja, planilla). */
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted-foreground);
+  }
+  /* Tarjeta con la sombra suave de la identidad del proyecto. */
+  .surface-card { box-shadow: var(--shadow); }
 }

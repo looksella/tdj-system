@@ -1,9 +1,5 @@
-// Inyectado por el pipeline de TuSistema.AI. Pantalla que se muestra cuando
-// el usuario abre la app sin conexión.
-// NO modificar — sobreescrito automáticamente en cada iteración.
-//
-// El service worker la cachea en el install y la sirve cuando una
-// navegación falla. Tres restricciones que la hacen confiable:
+// Offline page shown when the user opens the app without a network connection.
+// The service worker caches this static page during installation.
 //   - Estática: sin fetch, sin DB, sin cookies. Si dependiera de la red no
 //     serviría justo cuando hace falta.
 //   - Estilos inline: no importa nada de components/ui ni depende del

@@ -1,20 +1,4 @@
-// ============================================================
-// PLATFORM FILE — lib/beon-storage.ts
-// Generado e inyectado por TuSistema. NO editar ni reescribir:
-// importá estas funciones y usalas tal cual. Es la ÚNICA forma de
-// tocar el bucket privado del sistema (Supabase Storage).
-//
-// SERVER-SIDE ONLY: usa la service role key. Nunca lo importes desde
-// un archivo "use client"; el navegador sube con
-// lib/beon-storage-client.ts.
-//
-// Por qué el archivo NUNCA pasa por un Server Action ni un Route
-// Handler: los Server Actions de Next cortan el body (1 MB por
-// default) y las funciones de Vercel en 4,5 MB, así que una foto
-// sacada con el teléfono (2-8 MB) tira la app a "Algo salió mal". El
-// navegador sube DIRECTO al bucket con una URL firmada que emite este
-// archivo; por el server viajan solo el nombre y el path (bytes: cero).
-// ============================================================
+// Server-side Supabase Storage helpers. Never import this file into client code.
 export interface SubidaFirmada {
   /** Path del objeto dentro del bucket. Es lo que se guarda en la base. */
   path: string;
@@ -29,7 +13,7 @@ function env() {
     serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   };
 }
-/** true cuando la plataforma ya activó el almacenamiento para este sistema. */
+/** Whether Supabase Storage is configured for this application. */
 export function storageActivo(): boolean {
   const { url, bucket, serviceKey } = env();
   return Boolean(url && bucket && serviceKey);

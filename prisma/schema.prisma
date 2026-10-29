@@ -166,3 +166,160 @@ model LineaCompra {
   @@index([productId])
   @@map("lineas_compra")
 }
+
+// === Turno, caja, asistencia y planilla ===
+// Portado de caja-y-planilla-2934. El empleado opera caja y marcajes; la
+// planilla y la gestión del equipo quedan para el administrador.
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  SALE
+  EXPENSE
+  ADJUSTMENT
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  OTHER
+}
+
+enum PunchType {
+  ENTRY
+  LUNCH_START
+  LUNCH_END
+  EXIT
+}
+
+model Employee {
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fullName             String           @map("full_name")
+  // Correo de la cuenta con la que esta persona inicia sesión. Es lo que
+  // vincula la ficha del equipo con su usuario y lo que impide que un
+  // empleado abra caja o marque asistencia a nombre de otra persona.
+  email                String?          @unique
+  pinHash              String           @map("pin_hash")
+  role                 String
+  monthlySalary        Decimal          @db.Decimal(10, 2) @map("monthly_salary")
+  applyLegalDeductions Boolean          @default(true) @map("apply_legal_deductions")
+  scheduledStart       String           @default("08:00") @map("scheduled_start")
+  scheduledEnd         String           @default("17:00") @map("scheduled_end")
+  weeklyHours          Decimal          @default(44) @db.Decimal(4, 1) @map("weekly_hours")
+  active               Boolean          @default(true)
+  cashSessions         CashSession[]
+  attendanceMarks      AttendanceMark[]
+  payrollLines         PayrollLine[]
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @default(now()) @map("updated_at")
+
+  @@map("employees")
+}
+
+model CashSession {
+  id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId           String            @db.Uuid @map("employee_id")
+  employee             Employee          @relation(fields: [employeeId], references: [id])
+  openingMarkId        String?           @unique @db.Uuid @map("opening_mark_id")
+  openingMark          AttendanceMark?   @relation(fields: [openingMarkId], references: [id], onDelete: SetNull)
+  status               CashSessionStatus @default(OPEN)
+  openedAt             DateTime          @default(now()) @map("opened_at")
+  openingFloat         Decimal           @db.Decimal(10, 2) @map("opening_float")
+  openingDenominations Json              @map("opening_denominations")
+  closedAt             DateTime?         @map("closed_at")
+  countedCash          Decimal?          @db.Decimal(10, 2) @map("counted_cash")
+  expectedCash         Decimal?          @db.Decimal(10, 2) @map("expected_cash")
+  difference           Decimal?          @db.Decimal(10, 2)
+  closingDenominations Json?             @map("closing_denominations")
+  notes                String?           @db.Text
+  movements            CashMovement[]
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @default(now()) @map("updated_at")
+
+  @@index([employeeId, openedAt])
+  @@index([status, openedAt])
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId   String           @db.Uuid @map("session_id")
+  session     CashSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type        CashMovementType
+  method      PaymentMethod
+  amount      Decimal          @db.Decimal(10, 2)
+  description String
+  occurredAt  DateTime         @default(now()) @map("occurred_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @default(now()) @map("updated_at")
+
+  @@index([sessionId, occurredAt])
+  @@map("cash_movements")
+}
+
+model AttendanceMark {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId  String       @db.Uuid @map("employee_id")
+  employee    Employee     @relation(fields: [employeeId], references: [id])
+  cashSession CashSession?
+  type        PunchType
+  markedAt    DateTime     @default(now()) @map("marked_at")
+  latitude    Decimal?     @db.Decimal(9, 6)
+  longitude   Decimal?     @db.Decimal(9, 6)
+  note        String?      @db.VarChar(240)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @default(now()) @map("updated_at")
+
+  @@index([employeeId, markedAt])
+  @@map("attendance_marks")
+}
+
+model PayrollLine {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId         String   @db.Uuid @map("employee_id")
+  employee           Employee @relation(fields: [employeeId], references: [id])
+  periodStart        DateTime @map("period_start")
+  periodEnd          DateTime @map("period_end")
+  ordinaryDayHours   Decimal  @default(0) @db.Decimal(7, 2) @map("ordinary_day_hours")
+  ordinaryNightHours Decimal  @default(0) @db.Decimal(7, 2) @map("ordinary_night_hours")
+  extraDayHours      Decimal  @default(0) @db.Decimal(7, 2) @map("extra_day_hours")
+  extraNightHours    Decimal  @default(0) @db.Decimal(7, 2) @map("extra_night_hours")
+  holidayHours       Decimal  @default(0) @db.Decimal(7, 2) @map("holiday_hours")
+  compensatoryDayOff Boolean  @default(false) @map("compensatory_day_off")
+  tardyMinutes       Int      @default(0) @map("tardy_minutes")
+  basePay            Decimal  @db.Decimal(10, 2) @map("base_pay")
+  overtimePay        Decimal  @default(0) @db.Decimal(10, 2) @map("overtime_pay")
+  bonuses            Decimal  @default(0) @db.Decimal(10, 2)
+  adjustments        Decimal  @default(0) @db.Decimal(10, 2)
+  grossPay           Decimal  @db.Decimal(10, 2) @map("gross_pay")
+  isssDeduction      Decimal  @default(0) @db.Decimal(10, 2) @map("isss_deduction")
+  afpDeduction       Decimal  @default(0) @db.Decimal(10, 2) @map("afp_deduction")
+  incomeTaxDeduction Decimal  @default(0) @db.Decimal(10, 2) @map("income_tax_deduction")
+  netPay             Decimal  @db.Decimal(10, 2) @map("net_pay")
+  legalDeductions    Boolean  @map("legal_deductions")
+  status             String   @default("DRAFT")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @default(now()) @map("updated_at")
+
+  @@unique([employeeId, periodStart, periodEnd])
+  @@index([periodStart, periodEnd])
+  @@map("payroll_lines")
+}
+
+model LaborSettings {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  graceMinutes        Int      @default(10) @map("grace_minutes")
+  nightPremiumPercent Decimal  @default(25) @db.Decimal(5, 2) @map("night_premium_percent")
+  dailyDayLimit       Decimal  @default(8) @db.Decimal(4, 2) @map("daily_day_limit")
+  weeklyDayLimit      Decimal  @default(44) @db.Decimal(5, 2) @map("weekly_day_limit")
+  dailyNightLimit     Decimal  @default(7) @db.Decimal(4, 2) @map("daily_night_limit")
+  weeklyNightLimit    Decimal  @default(39) @db.Decimal(5, 2) @map("weekly_night_limit")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @default(now()) @map("updated_at")
+
+  @@map("labor_settings")
+}

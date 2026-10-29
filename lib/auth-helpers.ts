@@ -1,6 +1,5 @@
 /**
- * Permisos del negocio. El bloque de roles lo genera TuSistema desde lo que el
- * dueño describió en el wizard; el mecanismo (`isAllowed`) es fijo.
+ * Permisos de la aplicación.
  *
  * Los roles viven en `user.app_metadata.role` (persisten en `auth.users`) y
  * los lee `getEffectiveUser()` en `lib/supabase/helpers.ts`.
@@ -11,8 +10,8 @@
  * `app_metadata` solo se escribe con la service role key, server-side.
  *
  * Cómo se escribe, según el camino:
- * - `auth.admin.createUser({ ..., app_metadata: { role } })` — el único que lo
- *   acepta en una sola llamada (es el bootstrap del primer admin).
+ * - `auth.admin.createUser({ ..., app_metadata: { role } })` — lo asigna al
+ *   crear el primer administrador.
  * - Invitaciones (`inviteUserByEmail`, `generateLink`): NO aceptan
  *   `app_metadata`; su opción `data` escribe `user_metadata`. Van en DOS
  *   pasos — invitar sin rol y, con el `id` devuelto,
@@ -20,17 +19,39 @@
  *   user_metadata: { role: null } })`. Si el segundo paso falla, se revierte
  *   la invitación: nunca un usuario a medio crear.
  */
-/* @tusistema:APP_ROLES:start */
-export type AppRole = "admin";
+export type AppRole = "developer" | "admin" | "employee";
 /**
- * Qué puede hacer cada rol. `"*"` es wildcard (el dueño).
+ * Qué puede hacer cada rol. `"*"` es wildcard.
  * Un rol que no esté acá no puede hacer nada — fail closed.
  */
 const PERMISSIONS: Record<AppRole, Set<string>> = {
-  // Dueño — ve y modifica todo.
+  developer: new Set(["*"]),
   admin: new Set(["*"]),
+  employee: new Set([
+    "inventory:read",
+    "pos:read",
+    "sales:create",
+    // Turno: lo que hace el equipo en el mostrador.
+    "cash:operate",
+    "attendance:punch",
+  ]),
 };
-/* @tusistema:APP_ROLES:end */
+
+/**
+ * Herramientas del turno y quién puede entrar a cada una.
+ *
+ * Vive acá y no en cada pantalla para que el menú, la guarda de la página y
+ * las Server Actions hablen del mismo permiso. Lo que el empleado NO tiene
+ * (`payroll:manage`, `team:manage`, `attendance:manage`) es la frontera entre
+ * "mi turno" y "la nómina del negocio".
+ */
+export const PERMISOS_TURNO = {
+  caja: "cash:operate",
+  asistencia: "attendance:punch",
+  planilla: "payroll:manage",
+  gestionEquipo: "team:manage",
+  corregirMarcajes: "attendance:manage",
+} as const;
 /**
  * Único chequeo de permisos de la app. Fail closed: sin rol, o con un rol que
  * no está en PERMISSIONS, devuelve false.
@@ -52,5 +73,5 @@ export function isAllowed(role: string | null | undefined, action: string): bool
   if (!perms) return false;
   return perms.has("*") || perms.has(action);
 }
-/** Los roles configurados, para poblar selects de invitación. */
-export const APP_ROLES = Object.keys(PERMISSIONS) as AppRole[];
+/** Developer is reserved for the local bootstrap command, never invitations. */
+export const INVITABLE_ROLES = ["admin", "employee"] as const;

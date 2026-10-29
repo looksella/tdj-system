@@ -1,15 +1,4 @@
-// Inyectado por el pipeline de TuSistema.AI. Icono para la pantalla de
-// inicio de iOS.
-// NO modificar — sobreescrito automáticamente en cada iteración.
-//
-// iOS ignora los iconos del manifest para el home screen y usa
-// apple-touch-icon. 180x180 es el tamaño que pide, sin transparencia y SIN
-// bordes redondeados: iOS aplica su propia máscara y si los redondeamos
-// nosotros quedan dobles.
-//
-// Con NEXT_PUBLIC_APP_LOGO_URL dibuja el logo, igual que app/icon.tsx; sin
-// él, las iniciales. Hasta acá dibujaba siempre las iniciales y en iPhone el
-// dueño nunca veía la imagen que cargó.
+// iOS home-screen icon. It uses the configured logo or the app initials.
 import { ImageResponse } from "next/og";
 const SIZE = { width: 180, height: 180 };
 /**
@@ -43,9 +32,7 @@ function versionDelIcono(): string {
 export function generateImageMetadata() {
   return [{ id: versionDelIcono(), size: SIZE, contentType: "image/png" }];
 }
-/** Misma lógica que app/icon.tsx — duplicada a propósito: son platform
- *  files independientes y un helper compartido sería un archivo más que el
- *  agente podría borrar. Lo mismo vale para `logoDataUri`. */
+/** Mirrors the icon metadata because Next treats each icon route independently. */
 function initials(name: string): string {
   const words = name
     .trim()

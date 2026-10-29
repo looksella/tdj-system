@@ -35,7 +35,12 @@ function readCsv(path) {
   return values.map((valuesRow) => Object.fromEntries(headers.map((header, index) => [header, valuesRow[index] ?? ""])));
 }
 const nullable = (value) => value ? value : null;
-const dateOrNull = (value) => value ? new Date(value.replace(" ", "T")) : null;
+const dateOrNull = (value) => {
+  if (!value) return null;
+  const normalized = value.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 try {
   if (await prisma.categoria.count() === 0) {
     const categories = readCsv("./data/categorias.csv").map((row) => ({

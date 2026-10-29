@@ -1,0 +1,323 @@
+"use server";
+/**
+ * Server Actions de turno: caja, asistencia y planilla.
+ *
+ * Separado de `lib/actions/commerce.ts` (inventario y ventas) porque acá manda
+ * la persona, no el producto: cada acción toca una ficha de `Employee`.
+ *
+ * Permisos (ver `lib/auth-helpers.ts`):
+ * - `cash:operate` y `attendance:punch`: empleado y administrador.
+ * - `attendance:manage`, `payroll:manage` y `team:manage`: solo administrador.
+ *
+ * Además del chequeo de rol, un usuario con rol `employee` solo puede operar
+ * sobre SU ficha: el servidor resuelve la ficha por el correo de la sesión y
+ * descarta cualquier id que llegue del formulario. Ocultar el selector en la
+ * UI no sería suficiente.
+ */
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { revalidatePath } from "next/cache";
+import { db } from "@/lib/db";
+import { guardAccion } from "@/lib/guard-autorizacion";
+import { TIMEZONE } from "@/lib/locale";
+import { calculateAttendanceHours, calculatePayroll } from "@/lib/payroll";
+import { getEffectiveUser } from "@/lib/supabase/helpers";
+
+const hashPin = (pin: string) => {
+  const salt = randomBytes(16).toString("hex");
+  return `${salt}:${scryptSync(pin, salt, 64).toString("hex")}`;
+};
+
+function verifyPin(pin: string, stored: string) {
+  const [salt, expected] = stored.split(":");
+  const actual = expected ? scryptSync(pin, salt, 64) : createHash("sha256").update(pin).digest();
+  const expectedBytes = Buffer.from(expected ?? stored, "hex");
+  return actual.length === expectedBytes.length && timingSafeEqual(actual, expectedBytes);
+}
+
+const numberFrom = (form: FormData, key: string) => Number(form.get(key) ?? 0);
+const textFrom = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
+const denominationValues = [100, 50, 20, 10, 5, 1, 0.25, 0.1, 0.05] as const;
+
+function readDenominations(form: FormData, prefix: string) {
+  const counts = Object.fromEntries(denominationValues.map((value) => [String(value), Math.max(0, Math.floor(Number(form.get(`${prefix}${String(value).replace(".", "_")}`) ?? 0) || 0))]));
+  const total = denominationValues.reduce((sum, value) => sum + value * Number(counts[String(value)]), 0);
+  return { counts, total: Math.round(total * 100) / 100 };
+}
+
+const refresh = (...paths: string[]) => paths.forEach((path) => revalidatePath(path));
+
+/**
+ * Niega con el texto del guard (ya viene en el idioma del negocio) y, si el
+ * rol es `employee`, devuelve la ficha del equipo que le pertenece.
+ *
+ * `null` en `vinculado` con rol `employee` significa "esta cuenta todavía no
+ * tiene ficha": se corta con un mensaje que el dueño puede resolver desde
+ * Planilla, en vez de dejar pasar la acción como si fuera el administrador.
+ */
+async function contextoDeOperacion(accion: string) {
+  const negado = await guardAccion(accion);
+  if (negado) throw new Error(negado);
+  const user = await getEffectiveUser();
+  if (!user) throw new Error("Tu sesión expiró. Vuelve a entrar.");
+  if (user.role !== "employee") return { esEmpleado: false as const, empleado: null };
+  const empleado = user.email
+    ? await db.employee.findFirst({ where: { email: { equals: user.email, mode: "insensitive" } } })
+    : null;
+  return { esEmpleado: true as const, empleado };
+}
+
+const SIN_FICHA = "Tu usuario todavía no está vinculado a una ficha del equipo. Pedile al administrador que registre tu correo en Planilla.";
+
+// --- Caja -------------------------------------------------------------------
+
+export async function openCash(form: FormData) {
+  const { esEmpleado, empleado } = await contextoDeOperacion("cash:operate");
+  if (esEmpleado && !empleado) throw new Error(SIN_FICHA);
+  // El id del formulario solo vale para el administrador.
+  const employeeId = esEmpleado ? empleado!.id : textFrom(form, "employeeId");
+  const opening = readDenominations(form, "open_");
+  if (!employeeId || opening.total <= 0) throw new Error("Registra el fondo inicial contando sus denominaciones.");
+  if (await db.cashSession.count({ where: { status: "OPEN" } })) throw new Error("Ya hay una caja abierta.");
+  const employee = await db.employee.findUnique({ where: { id: employeeId } });
+  if (!employee?.active) throw new Error("Selecciona una persona activa.");
+  const now = new Date();
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const entryMark = await db.attendanceMark.findFirst({ where: { employeeId, type: "ENTRY", markedAt: { gte: new Date(`${day}T00:00:00-06:00`), lte: now } }, orderBy: { markedAt: "asc" } });
+  if (!entryMark) throw new Error("Primero registra la entrada de la persona con su PIN.");
+  await db.cashSession.create({ data: {
+    employeeId, openingMarkId: entryMark.id, openingFloat: opening.total, openingDenominations: opening.counts, openedAt: now,
+  } });
+  refresh("/", "/caja");
+}
+
+export async function closeCash(form: FormData) {
+  await contextoDeOperacion("cash:operate");
+  const sessionId = textFrom(form, "sessionId");
+  const closing = readDenominations(form, "close_");
+  const countedCash = closing.total;
+  if (!sessionId) throw new Error("No se encontró el turno que quieres cerrar.");
+  const session = await db.cashSession.findUnique({ where: { id: sessionId }, include: { movements: true } });
+  if (!session || session.status !== "OPEN") throw new Error("Esta caja ya fue cerrada.");
+  const cashSales = session.movements.filter((move) => move.method === "CASH" && move.type === "SALE").reduce((sum, move) => sum + Number(move.amount), 0);
+  const cashExpenses = session.movements.filter((move) => move.method === "CASH" && move.type === "EXPENSE").reduce((sum, move) => sum + Number(move.amount), 0);
+  const expectedCash = Number(session.openingFloat) + cashSales - cashExpenses;
+  await db.cashSession.update({ where: { id: sessionId }, data: {
+    status: "CLOSED", closedAt: new Date(), countedCash, expectedCash, difference: countedCash - expectedCash,
+    closingDenominations: closing.counts, notes: textFrom(form, "notes") || null,
+  } });
+  refresh("/", "/caja");
+}
+
+export async function addCashMovement(form: FormData) {
+  await contextoDeOperacion("cash:operate");
+  const sessionId = textFrom(form, "sessionId");
+  const amount = numberFrom(form, "amount");
+  const type = textFrom(form, "type") as "SALE" | "EXPENSE";
+  const method = textFrom(form, "method") as "CASH" | "CARD" | "TRANSFER" | "OTHER";
+  if (amount <= 0 || !textFrom(form, "description")) throw new Error("Completa un concepto y un importe válido.");
+  const session = await db.cashSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+  if (session?.status !== "OPEN") throw new Error("Solo puedes agregar movimientos a una caja abierta.");
+  await db.cashMovement.create({ data: { sessionId, type, method, amount, description: textFrom(form, "description") } });
+  refresh("/", "/caja");
+}
+
+export async function updateCashMovement(form: FormData) {
+  await contextoDeOperacion("cash:operate");
+  const id = textFrom(form, "id");
+  const amount = numberFrom(form, "amount");
+  const sessionId = textFrom(form, "sessionId");
+  const session = await db.cashSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+  if (session?.status !== "OPEN" || amount <= 0) throw new Error("No se pudo actualizar el movimiento.");
+  await db.cashMovement.update({ where: { id }, data: {
+    amount, description: textFrom(form, "description"),
+    type: textFrom(form, "type") as "SALE" | "EXPENSE",
+    method: textFrom(form, "method") as "CASH" | "CARD" | "TRANSFER" | "OTHER",
+  } });
+  refresh("/", "/caja");
+}
+
+export async function deleteCashMovement(form: FormData) {
+  await contextoDeOperacion("cash:operate");
+  const id = textFrom(form, "id");
+  const sessionId = textFrom(form, "sessionId");
+  const session = await db.cashSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+  if (session?.status !== "OPEN") throw new Error("La caja está cerrada; no se puede alterar su arqueo.");
+  await db.cashMovement.delete({ where: { id } });
+  refresh("/", "/caja");
+}
+
+// --- Asistencia -------------------------------------------------------------
+
+export async function recordPunch(form: FormData) {
+  const { esEmpleado, empleado } = await contextoDeOperacion("attendance:punch");
+  if (esEmpleado && !empleado) throw new Error(SIN_FICHA);
+  // Un empleado solo marca por sí mismo: el id del formulario no se usa.
+  const employeeId = esEmpleado ? empleado!.id : textFrom(form, "employeeId");
+  const pin = textFrom(form, "pin");
+  const type = textFrom(form, "type") as "ENTRY" | "LUNCH_START" | "LUNCH_END" | "EXIT";
+  const employee = await db.employee.findUnique({ where: { id: employeeId } });
+  if (!employee?.active || !verifyPin(pin, employee.pinHash)) throw new Error("El PIN no coincide con una persona activa.");
+  const now = new Date();
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const dayStart = new Date(`${day}T00:00:00-06:00`);
+  const latest = await db.attendanceMark.findFirst({ where: { employeeId, markedAt: { gte: dayStart, lte: now } }, orderBy: { markedAt: "desc" } });
+  const expected: Record<string, string> = { ENTRY: "EXIT", LUNCH_START: "ENTRY", LUNCH_END: "LUNCH_START", EXIT: "LUNCH_END" };
+  if ((!latest && type !== "ENTRY") || (latest && expected[type] !== latest.type)) throw new Error("Sigue el orden de marcajes: entrada, almuerzo, regreso y salida.");
+  await db.attendanceMark.create({ data: { employeeId, type, markedAt: now } });
+  refresh("/", "/asistencia");
+}
+
+export async function updateAttendanceMark(form: FormData) {
+  await contextoDeOperacion("attendance:manage");
+  const id = textFrom(form, "id");
+  const date = new Date(textFrom(form, "markedAt"));
+  if (!Number.isFinite(date.getTime())) throw new Error("La fecha del marcaje no es válida.");
+  await db.attendanceMark.update({ where: { id }, data: {
+    type: textFrom(form, "type") as "ENTRY" | "LUNCH_START" | "LUNCH_END" | "EXIT", markedAt: date,
+  } });
+  refresh("/", "/asistencia", "/planilla");
+}
+
+export async function deleteAttendanceMark(form: FormData) {
+  await contextoDeOperacion("attendance:manage");
+  await db.attendanceMark.delete({ where: { id: textFrom(form, "id") } });
+  refresh("/", "/asistencia", "/planilla");
+}
+
+export async function updateLaborSettings(form: FormData) {
+  await contextoDeOperacion("attendance:manage");
+  const graceMinutes = Math.max(0, Math.min(60, numberFrom(form, "graceMinutes")));
+  const current = await db.laborSettings.findFirst();
+  if (current) await db.laborSettings.update({ where: { id: current.id }, data: { graceMinutes } });
+  else await db.laborSettings.create({ data: { graceMinutes } });
+  refresh("/", "/asistencia", "/planilla");
+}
+
+// --- Equipo y planilla (solo administrador) ---------------------------------
+
+export async function saveEmployee(form: FormData) {
+  await contextoDeOperacion("team:manage");
+  const id = textFrom(form, "id");
+  const fullName = textFrom(form, "fullName");
+  const pin = textFrom(form, "pin");
+  const email = textFrom(form, "email").toLowerCase();
+  const monthlySalary = numberFrom(form, "monthlySalary");
+  if (!fullName || monthlySalary < 1 || (!id && !/^\d{4,6}$/.test(pin)) || (Boolean(pin) && !/^\d{4,6}$/.test(pin))) throw new Error("Revisa el nombre, el salario y el PIN de 4 a 6 dígitos.");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("El correo de la cuenta no tiene un formato válido.");
+  const data = {
+    fullName, role: textFrom(form, "role"), monthlySalary, email: email || null,
+    applyLegalDeductions: textFrom(form, "applyLegalDeductions") === "on",
+    active: textFrom(form, "active") === "on",
+    scheduledStart: textFrom(form, "scheduledStart"), scheduledEnd: textFrom(form, "scheduledEnd"),
+    weeklyHours: numberFrom(form, "weeklyHours") || 44,
+    ...(pin ? { pinHash: hashPin(pin) } : {}),
+  };
+  try {
+    if (id) await db.employee.update({ where: { id }, data });
+    else await db.employee.create({ data: { ...data, pinHash: hashPin(pin) } });
+  } catch (error) {
+    // El correo es único: dos fichas con el mismo correo dejarían a una sola
+    // cuenta con dos turnos posibles. El mensaje de Prisma no se le muestra
+    // al dueño.
+    if (typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002") {
+      throw new Error("Ese correo ya está vinculado a otra persona del equipo.");
+    }
+    throw error;
+  }
+  refresh("/", "/planilla", "/asistencia", "/caja");
+}
+
+export async function deleteEmployee(form: FormData) {
+  await contextoDeOperacion("team:manage");
+  const id = textFrom(form, "id");
+  const [cash, marks, payroll] = await Promise.all([
+    db.cashSession.count({ where: { employeeId: id } }),
+    db.attendanceMark.count({ where: { employeeId: id } }),
+    db.payrollLine.count({ where: { employeeId: id } }),
+  ]);
+  // Con historial no se borra: se desactiva. Un borrado se llevaría el arqueo
+  // o la liquidación de meses ya pagados.
+  if (cash + marks + payroll) {
+    await db.employee.update({ where: { id }, data: { active: false } });
+  } else {
+    await db.employee.delete({ where: { id } });
+  }
+  refresh("/", "/planilla", "/asistencia", "/caja");
+}
+
+export async function generatePayroll(form: FormData) {
+  await contextoDeOperacion("payroll:manage");
+  const month = textFrom(form, "month");
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Selecciona un período válido.");
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const periodStart = new Date(`${month}-01T00:00:00-06:00`);
+  const periodEnd = new Date(`${month}-${String(lastDay).padStart(2, "0")}T23:59:59-06:00`);
+  const [employees, settings] = await Promise.all([
+    db.employee.findMany({ where: { active: true }, orderBy: { fullName: "asc" } }),
+    db.laborSettings.findFirst(),
+  ]);
+  const graceMinutes = settings?.graceMinutes ?? 10;
+  const marks = await db.attendanceMark.findMany({
+    where: { employeeId: { in: employees.map((employee) => employee.id) }, markedAt: { gte: periodStart, lte: periodEnd } },
+    orderBy: { markedAt: "asc" },
+  });
+  const existingLines = await db.payrollLine.findMany({ where: { periodStart, periodEnd } });
+  const previousByEmployee = new Map(existingLines.map((line) => [line.employeeId, line]));
+  for (const employee of employees) {
+    const employeeMarks = marks.filter((mark) => mark.employeeId === employee.id);
+    const hours = calculateAttendanceHours(employeeMarks, employee.scheduledStart, graceMinutes);
+    const previous = previousByEmployee.get(employee.id);
+    const bonuses = Number(previous?.bonuses ?? 0);
+    const adjustments = Number(previous?.adjustments ?? 0);
+    const holidayHours = Number(previous?.holidayHours ?? 0);
+    const pay = calculatePayroll(Number(employee.monthlySalary), hours, bonuses, adjustments, employee.applyLegalDeductions, holidayHours, Number(employee.weeklyHours));
+    await db.payrollLine.upsert({
+      where: { employeeId_periodStart_periodEnd: { employeeId: employee.id, periodStart, periodEnd } },
+      create: {
+        employeeId: employee.id, periodStart, periodEnd, ...hours, holidayHours,
+        compensatoryDayOff: previous?.compensatoryDayOff ?? false, bonuses, adjustments,
+        basePay: pay.basePay, overtimePay: pay.overtimePay, grossPay: pay.grossPay,
+        isssDeduction: pay.isssDeduction, afpDeduction: pay.afpDeduction,
+        incomeTaxDeduction: pay.incomeTaxDeduction, netPay: pay.netPay,
+        legalDeductions: employee.applyLegalDeductions, status: previous?.status ?? "DRAFT",
+      },
+      update: {
+        ...hours, holidayHours, bonuses, adjustments, compensatoryDayOff: previous?.compensatoryDayOff ?? false,
+        basePay: pay.basePay, overtimePay: pay.overtimePay, grossPay: pay.grossPay,
+        isssDeduction: pay.isssDeduction, afpDeduction: pay.afpDeduction,
+        incomeTaxDeduction: pay.incomeTaxDeduction, netPay: pay.netPay,
+        legalDeductions: employee.applyLegalDeductions, status: previous?.status ?? "DRAFT",
+      },
+    });
+  }
+  refresh("/", "/planilla");
+}
+
+export async function updatePayroll(form: FormData) {
+  await contextoDeOperacion("payroll:manage");
+  const id = textFrom(form, "id");
+  const line = await db.payrollLine.findUnique({ where: { id }, include: { employee: true } });
+  if (!line) throw new Error("No se encontró la liquidación.");
+  const bonuses = numberFrom(form, "bonuses");
+  const adjustments = numberFrom(form, "adjustments");
+  const holidayHours = Math.max(0, numberFrom(form, "holidayHours"));
+  const compensatoryDayOff = textFrom(form, "compensatoryDayOff") === "on";
+  const hours = {
+    ordinaryDayHours: Number(line.ordinaryDayHours), ordinaryNightHours: Number(line.ordinaryNightHours),
+    extraDayHours: Number(line.extraDayHours), extraNightHours: Number(line.extraNightHours), tardyMinutes: line.tardyMinutes,
+  };
+  const pay = calculatePayroll(Number(line.employee.monthlySalary), hours, bonuses, adjustments, line.legalDeductions, holidayHours, Number(line.employee.weeklyHours));
+  await db.payrollLine.update({ where: { id }, data: {
+    bonuses, adjustments, holidayHours, compensatoryDayOff, basePay: pay.basePay, overtimePay: pay.overtimePay, grossPay: pay.grossPay,
+    isssDeduction: pay.isssDeduction, afpDeduction: pay.afpDeduction, incomeTaxDeduction: pay.incomeTaxDeduction,
+    netPay: pay.netPay, status: textFrom(form, "status") || line.status,
+  } });
+  refresh("/", "/planilla");
+}
+
+export async function deletePayroll(form: FormData) {
+  await contextoDeOperacion("payroll:manage");
+  await db.payrollLine.delete({ where: { id: textFrom(form, "id") } });
+  refresh("/", "/planilla");
+}

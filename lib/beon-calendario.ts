@@ -1,14 +1,4 @@
-// ============================================================
-// PLATFORM FILE — lib/beon-calendario.ts (v1.0.1)
-// Generado e inyectado por TuSistema. NO editar ni reescribir.
-// Sincroniza turnos / citas / reservas con el Google Calendar del
-// dueño por el proxy de la plataforma: la app nunca ve un token
-// de Google y no llama a Google directo. Sin conexión NO falla:
-// devuelve { synced: false, reason: "not_connected" } y la
-// operación del sistema sigue igual.
-// Server-side only (Server Action o Route Handler): nunca desde
-// un componente "use client".
-// ============================================================
+// Optional server-side synchronization with the configured calendar service.
 const HELPER = "beon-calendario/1.0.1";
 export type EstadoCalendario = {
   /** `solo_publicado`: Ya no se devuelve (2026-10-02). Queda en el tipo para que compilen las apps que lo comparan. */
@@ -117,7 +107,7 @@ export async function sincronizarTurno(turno: TurnoParaCalendario): Promise<Resu
     });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Beon Tools no configurado")) throw error;
-    return { synced: false, reason: "error", message: "No se pudo contactar a TuSistema." };
+    return { synced: false, reason: "error", message: "No se pudo contactar al servicio de calendario." };
   }
   if (!res.ok) return sinSincronizar(res);
   const body = (await res.json()) as { google_event_id: string; html_link?: string | null; meet_link?: string | null };

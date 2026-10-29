@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { CircleDollarSign, Medal, Tags } from "lucide-react";
-import { SupplierPriceDialog } from "@/components/supplier-prices/supplier-price-dialog";
+import { SupplierPriceDialog } from "@/components/supplier.prices/supplier-price-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/locale";
+import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export default async function SupplierPricesPage() {
+  await requirePagePermission("prices:manage");
   const [prices, suppliers, products] = await Promise.all([
     db.precioProveedor.findMany({ orderBy: [{ product: { name: "asc" } }, { unitCost: "asc" }], take: 300, include: { supplier: { select: { name: true } }, product: { select: { name: true, sku: true } } } }),
     db.proveedor.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, take: 200, select: { id: true, name: true } }),

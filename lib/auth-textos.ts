@@ -35,29 +35,19 @@ export const AUTH_COPY = {
       noConfigurado: "La autenticación no está configurada en este entorno.",
       volverAlLogin: "Volver al inicio de sesión",
       revisaTuEmail: "Revisá tu email",
-      // Lo que queda en los logs de Vercel (y en el mensaje del error del
-      // sandbox) si algo construye el cliente de Supabase con el login
-      // dormido. Reemplaza al críptico `supabaseUrl is required` de la
-      // librería. En producción la pantalla sigue siendo el global-error
-      // genérico: Next reemplaza el mensaje por un digest.
-      loginDormidoServidor:
-        "El login de este sistema no está activo: se activa desde TuSistema con un plan. Esta acción lo necesita.",
+      // Clear server-side error when a Supabase client is requested without
+      // the required public configuration.
+      supabaseNoConfiguradoServidor:
+        "Supabase Auth no está configurado. Define NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY.",
     },
-    // Lo que se ve en `/sign-in`, `/setup` y `/admin/usuarios` mientras el
-    // login todavía no está activo. Vive acá y no en el componente porque es
-    // la pantalla MÁS probable de un sistema recién nacido: si se hornea, el
-    // dueño brasileño lee castellano justo en la primera pantalla que abre.
+    // Copy shown when Supabase Auth is not configured.
     loginInactivo: {
       abierto:
-        "El login de tu sistema todavía no está activo, así que por ahora cualquiera con el link entra.",
+        "No se puede iniciar sesión hasta configurar las variables públicas de Supabase.",
       comoSeActiva:
-        "Se activa desde TuSistema.AI con un plan. Ahí vas a poder invitar a las personas que usan el sistema y darles un rol.",
+        "Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY, y crea el primer administrador con npm run create-admin.",
     },
-    // SPEC_INVITACIONES_QUE_NO_SE_QUEMAN Bloque 2 — la pantalla `/auth/acceso`,
-    // donde aterriza un link de email que no se pudo verificar. Antes el
-    // aterrizaje era el login con un código de error colgado de la URL: un
-    // formulario idéntico al normal, con una palabra en inglés en la barra de
-    // direcciones y cero explicación de qué pasó ni de cómo salir.
+    // The `/auth/acceso` page handles email links that could not be verified.
     acceso: {
       usadoTitulo: "Este link ya se usó",
       usadoDetalle:
@@ -135,43 +125,13 @@ export const AUTH_COPY = {
       cta: "Guardar contraseña",
       errorGenerico: "No se pudo guardar la contraseña. Probá de nuevo.",
     },
-    setup: {
-      sinTokenTitulo: "Falta un paso en TuSistema",
-      sinTokenP1:
-        "Esta pantalla no se completa desde acá. Tu cuenta de dueño se crea con un link que trae tu clave de configuración, y ese link te lo da TuSistema en la tarjeta de acceso de tu proyecto, recién cuando publicás el sistema.",
-      sinTokenP2:
-        "No hay nada que esperar en esta página: volvé a TuSistema, publicá tu sistema y desde ahí creá tu cuenta.",
-      cerradoTitulo: "Todo listo",
-      cerradoDetalle:
-        "La cuenta de administrador ya está creada. Iniciá sesión con tu email y contraseña.",
-      cerradoCta: "Ir a iniciar sesión",
-      listoTitulo: "¡Cuenta creada!",
-      listoDetalle:
-        "Ya sos el administrador. Ingresá con el email y la contraseña que elegiste.",
-      listoCta: "Iniciar sesión",
-      titulo: "Configuración inicial",
-      bajada:
-        "Creá tu cuenta de administrador. Después vas a poder invitar a tu equipo desde el sistema.",
-      passwordPlaceholder: "Mínimo 8 caracteres, con letras y números",
-      repetirPlaceholder: "Repetí la contraseña",
-      enviando: "Creando...",
-      cta: "Crear cuenta de administrador",
-      noCoinciden: "Las contraseñas no coinciden.",
-      errorGenerico: "No se pudo crear la cuenta.",
-      linkInvalido:
-        "Este link no es válido. Tu cuenta de dueño se crea desde TuSistema, en la tarjeta de acceso de tu proyecto.",
-    },
     usuarios: {
       tituloPagina: "Usuarios",
       bajadaPagina: "Invitá a las personas que van a usar el sistema.",
       soloYo: "Solo yo",
       invitarTitulo: "Invitar usuario",
-      // SPEC_INVITACIONES_QUE_NO_SE_QUEMAN Bloque 4 — la nota vieja hablaba
-      // del tope de 2 emails/hora del plan gratuito de Supabase y empujaba al
-      // admin hacia el link, que es el camino frágil. Ese tope ya no existe:
-      // con el SMTP de la plataforma cada proyecto sale por Resend.
       ayudaInvitar:
-        "Podés invitar por email o generar un link para compartir a mano. Los emails salen por el servidor de TuSistema.",
+        "Podés invitar por email o generar un link para compartir a mano. Los emails se envían con Supabase Auth.",
       metodo: "Método de entrega",
       metodoEmail: "Enviar por email",
       metodoLink: "Generar link para compartir",
@@ -187,6 +147,11 @@ export const AUTH_COPY = {
       colEmail: "Email",
       colAlta: "Alta",
       colRol: "Rol",
+      rolDesarrolladora: "Desarrolladora",
+      rolAdmin: "Administrador",
+      rolEmpleado: "Empleado",
+      rolSinPermisos: "Sin permisos",
+      rolProtegido: "Cuenta protegida",
       emailPlaceholder: "persona@email.com",
       copiar: "Copiar",
       copiarLink: "Copiar link",
@@ -216,7 +181,6 @@ export const AUTH_COPY = {
       datosInvalidos: "Datos inválidos",
       faltaEmailOPassword: "Completá email y contraseña",
       passwordCorta: "Mínimo 8 caracteres, con letras y números",
-      setupYaCompletado: "La configuración inicial ya fue completada. Iniciá sesión.",
       personaNoEncontrada: "No encontramos a esa persona en la lista de usuarios.",
       personaYaActiva: "Esta persona ya eligió su contraseña, así que no necesita un link de invitación. Si no puede entrar, decile que use «Olvidé mi contraseña» en /forgot-password.",
       noTePodesQuitar: "No podés quitarte a vos mismo del sistema.",
@@ -227,10 +191,6 @@ export const AUTH_COPY = {
       rolInvalido: "Ese rol no existe en este sistema.",
       rolNoAplicado:
         "No pudimos asignarle el rol a esa persona. Probá de nuevo.",
-      planRequerido:
-        "Con el plan gratis entra solo el dueño. Para sumar personas, el dueño activa un plan en TuSistema.",
-      cupoSinVerificar:
-        "No pude verificar el plan del sistema. Prueba de nuevo en un rato.",
     },
     errores: {
       rateLimit:
@@ -275,14 +235,14 @@ export const AUTH_COPY = {
       noConfigurado: "A autenticação não está configurada neste ambiente.",
       volverAlLogin: "Voltar para o login",
       revisaTuEmail: "Confira seu e-mail",
-      loginDormidoServidor:
-        "O login deste sistema não está ativo: ele é ativado no TeuSistema com um plano. Esta ação precisa dele.",
+      supabaseNoConfiguradoServidor:
+        "O Supabase Auth não está configurado. Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.",
     },
     loginInactivo: {
       abierto:
-        "O login do seu sistema ainda não está ativo, então por enquanto qualquer pessoa com o link entra.",
+        "Não é possível entrar até configurar as variáveis públicas do Supabase.",
       comoSeActiva:
-        "Ele é ativado no TeuSistema.AI com um plano. Lá você vai poder convidar as pessoas que usam o sistema e dar um papel para cada uma.",
+        "Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY e crie o primeiro administrador com npm run create-admin.",
     },
     acceso: {
       usadoTitulo: "Este link já foi usado",
@@ -355,39 +315,13 @@ export const AUTH_COPY = {
       cta: "Salvar senha",
       errorGenerico: "Não foi possível salvar a senha. Tente de novo.",
     },
-    setup: {
-      sinTokenTitulo: "Falta um passo no TeuSistema",
-      sinTokenP1:
-        "Esta tela não se completa por aqui. Sua conta de dono é criada com um link que leva sua chave de configuração, e esse link o TeuSistema te dá no cartão de acesso do seu projeto, só depois que você publica o sistema.",
-      sinTokenP2:
-        "Não há nada para esperar nesta página: volte para o TeuSistema, publique seu sistema e crie sua conta a partir de lá.",
-      cerradoTitulo: "Tudo pronto",
-      cerradoDetalle:
-        "A conta de administrador já está criada. Entre com seu e-mail e senha.",
-      cerradoCta: "Ir para o login",
-      listoTitulo: "Conta criada!",
-      listoDetalle:
-        "Você já é o administrador. Entre com o e-mail e a senha que escolheu.",
-      listoCta: "Entrar",
-      titulo: "Configuração inicial",
-      bajada:
-        "Crie sua conta de administrador. Depois você vai poder convidar sua equipe pelo sistema.",
-      passwordPlaceholder: "Mínimo de 8 caracteres, com letras e números",
-      repetirPlaceholder: "Repita a senha",
-      enviando: "Criando...",
-      cta: "Criar conta de administrador",
-      noCoinciden: "As senhas não coincidem.",
-      errorGenerico: "Não foi possível criar a conta.",
-      linkInvalido:
-        "Este link não é válido. Sua conta de dono é criada no TeuSistema, a partir do cartão de acesso do seu projeto.",
-    },
     usuarios: {
       tituloPagina: "Usuários",
       bajadaPagina: "Convide as pessoas que vão usar o sistema.",
       soloYo: "Só eu",
       invitarTitulo: "Convidar usuário",
       ayudaInvitar:
-        "Você pode convidar por e-mail ou gerar um link para compartilhar na mão. Os e-mails saem pelo servidor do TeuSistema.",
+        "Você pode convidar por e-mail ou gerar um link para compartilhar manualmente. Os e-mails são enviados com Supabase Auth.",
       metodo: "Forma de envio",
       metodoEmail: "Enviar por e-mail",
       metodoLink: "Gerar link para compartilhar",
@@ -403,6 +337,11 @@ export const AUTH_COPY = {
       colEmail: "E-mail",
       colAlta: "Cadastro",
       colRol: "Papel",
+      rolDesarrolladora: "Desenvolvedora",
+      rolAdmin: "Administradora",
+      rolEmpleado: "Funcionário",
+      rolSinPermisos: "Sem permissões",
+      rolProtegido: "Conta protegida",
       emailPlaceholder: "pessoa@email.com",
       copiar: "Copiar",
       copiarLink: "Copiar link",
@@ -427,7 +366,6 @@ export const AUTH_COPY = {
       datosInvalidos: "Dados inválidos",
       faltaEmailOPassword: "Preencha e-mail e senha",
       passwordCorta: "Mínimo de 8 caracteres, com letras e números",
-      setupYaCompletado: "A configuração inicial já foi concluída. Faça login.",
       personaNoEncontrada: "Não encontramos essa pessoa na lista de usuários.",
       personaYaActiva: "Essa pessoa já escolheu a senha, então não precisa de link de convite. Se ela não conseguir entrar, peça que use «Esqueci minha senha» em /forgot-password.",
       noTePodesQuitar: "Você não pode remover a si mesmo do sistema.",
@@ -438,10 +376,6 @@ export const AUTH_COPY = {
       rolInvalido: "Esse papel não existe neste sistema.",
       rolNoAplicado:
         "Não conseguimos atribuir o papel a essa pessoa. Tente de novo.",
-      planRequerido:
-        "No plano grátis só o dono entra. Para adicionar pessoas, o dono ativa um plano no TeuSistema.",
-      cupoSinVerificar:
-        "Não consegui verificar o plano do sistema. Tente de novo daqui a pouco.",
     },
     errores: {
       rateLimit:

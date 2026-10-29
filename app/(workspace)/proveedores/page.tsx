@@ -4,8 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/lib/db";
+import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export default async function SuppliersPage() {
+  await requirePagePermission("suppliers:manage");
   const suppliers = await db.proveedor.findMany({ orderBy: [{ isActive: "desc" }, { name: "asc" }], take: 200 });
   const activeSuppliers = suppliers.filter((supplier) => supplier.isActive).length;
   return (

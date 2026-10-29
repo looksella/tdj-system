@@ -1,7 +1,6 @@
 import { createClient, type User } from "@supabase/supabase-js";
-import { APP_ROLES } from "@/lib/auth-helpers";
+import { INVITABLE_ROLES, isAllowed } from "@/lib/auth-helpers";
 import { at } from "@/lib/auth-textos";
-import { rechazoPorCupo } from "@/lib/supabase/cupo";
 import { LOGIN_ACTIVO } from "@/lib/supabase/estado";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
 import {
@@ -14,10 +13,7 @@ export const dynamic = "force-dynamic";
  * Cliente admin (service role). SOLO server-side: bypassa RLS.
  *
  * Perezoso a propósito: `createClient` lanza si la URL es `undefined`, y Next
- * evalúa este módulo en "Collecting page data" durante `next build`. Con el
- * cliente a nivel de módulo, un deploy al que todavía no llegaron las env vars
- * de Supabase (auth horneada por la plataforma, primer publish antes del
- * provisioning) rompía el build entero. Acá se crea por request.
+ * evalúa este módulo durante el build. Acá se crea por request.
  */
 function supabaseAdmin() {
   return createClient(
@@ -29,33 +25,18 @@ function supabaseAdmin() {
  * El control de acceso real de la gestión de usuarios. Ocultar el link en el
  * sidebar, o el guard de la page, son cosmética: este chequeo es el que cuenta.
  */
-/**
- * El login de este sistema todavía no está activo: la plataforma inyecta las
- * variables de Supabase recién al activarlo (hace falta un plan).
- *
- * Un 503 explícito y no una excepción: sin esto, `getEffectiveUser()` y
- * `supabaseAdmin()` construyen el cliente con
- * `process.env.NEXT_PUBLIC_SUPABASE_URL!` y tiran, o sea que la ruta devolvía
- * un 500 con un stack de Next adentro del sistema del dueño. El código
- * `login_inactivo` es para que quien consuma esta ruta pueda distinguir "no
- * está activo" de "se rompió".
- */
 function loginInactivo(): Response | null {
-  // `AUTH_ABIERTO` (el plan del dueño terminó, ver `lib/supabase/helpers.ts`)
-  // cierra esta ruta por el MISMO 503: con el sistema abierto todo visitante
-  // es admin, así que sin esto cualquiera podría listar —o crear— los usuarios
-  // del sistema. Las cuentas no se tocan; vuelven a administrarse con el plan.
-  if (LOGIN_ACTIVO && process.env.BEON_AUTH_MODE !== "open") return null;
+  if (LOGIN_ACTIVO) return null;
   return Response.json(
     { error: "login_inactivo" },
     { status: 503, headers: { "Cache-Control": "no-store" } },
   );
 }
-async function requireAdmin(): Promise<Response | null> {
+async function requireUserManager(): Promise<Response | null> {
   const inactivo = loginInactivo();
   if (inactivo) return inactivo;
   const user = await getEffectiveUser();
-  if (!user || user.role !== "admin") {
+  if (!user || !isAllowed(user.role, "users:manage")) {
     return new Response("Forbidden", { status: 403 });
   }
   return null;
@@ -83,7 +64,7 @@ function estadoDe(u: User): "activo" | "abrio_sin_activar" | "pendiente" {
 }
 /** Listado. `pending` queda como derivado de `estado`, para no romper nada. */
 export async function GET() {
-  const forbidden = await requireAdmin();
+  const forbidden = await requireUserManager();
   if (forbidden) return forbidden;
   const { data, error } = await supabaseAdmin().auth.admin.listUsers();
   if (error) {
@@ -161,13 +142,11 @@ async function elevarRol(
   return Response.json({ error: at.api.rolNoAplicado }, { status: 500 });
 }
 /**
- * Los roles que se pueden asignar al invitar: los que declara el sistema más
- * `customer`, el rol sin permisos. `APP_ROLES` suele ser solo `["admin"]`, y
- * sin `customer` acá invitar a alguien "sin rol" daría 400. `customer` no
- * abre nada: `isAllowed` no le da permisos a un rol fuera de PERMISSIONS.
+ * Developer accounts are intentionally excluded; they can only be provisioned
+ * through the local developer bootstrap command.
  */
 function rolAsignable(role: string): boolean {
-  return role === "customer" || (APP_ROLES as readonly string[]).includes(role);
+  return INVITABLE_ROLES.some((candidate) => candidate === role);
 }
 /**
  * Alta de un invitado, por email o por link. UN método por invitado, nunca los
@@ -182,7 +161,7 @@ function rolAsignable(role: string): boolean {
  * fallar: `generateLink` no manda email ni consume ese límite.
  */
 export async function POST(request: Request) {
-  const forbidden = await requireAdmin();
+  const forbidden = await requireUserManager();
   if (forbidden) return forbidden;
   const { email, role, method } = await request.json();
   const origin = new URL(request.url).origin;
@@ -196,10 +175,6 @@ export async function POST(request: Request) {
   if (!rolAsignable(rolPedido)) {
     return Response.json({ error: at.api.rolInvalido }, { status: 400 });
   }
-  // Sin plan entra solo el dueño, y el tope vale también desde acá: antes de
-  // crear a nadie se le pregunta a la plataforma. Sin respuesta no se invita.
-  const sinCupo = await rechazoPorCupo();
-  if (sinCupo) return sinCupo;
   // ¿El email ya existía? Si la elevación falla, se borra solo a quien nació
   // en esta invitación. Sin la lista completa no se sabe: no se borra.
   const previos = await listarTodosLosUsuarios();
@@ -300,8 +275,7 @@ async function listarTodosLosUsuarios(): Promise<{
  * control: un curl la saltea):
  *
  *   1. Nadie se borra a sí mismo.
- *   2. No se borra a quien CREÓ el sistema (el `created_at` más viejo, o sea la
- *      cuenta que salió de /setup).
+ *   2. No se borra al primer administrador (el `created_at` más viejo).
  *   3. No se borra al último admin — el sistema quedaría sin nadie que pueda
  *      administrar usuarios, y de ahí no se vuelve.
  *
@@ -315,7 +289,7 @@ async function listarTodosLosUsuarios(): Promise<{
  * el usuario no lo puede tocar.
  */
 export async function DELETE(request: Request) {
-  const forbidden = await requireAdmin();
+  const forbidden = await requireUserManager();
   if (forbidden) return forbidden;
   // El body se parsea adentro del try: sin él, un request vacío o con algo que
   // no es JSON tira, y Next lo sirve como un 500 con stack adentro del sistema
@@ -346,6 +320,12 @@ export async function DELETE(request: Request) {
     return Response.json(
       { error: at.api.personaNoEncontrada },
       { status: 400 },
+    );
+  }
+  if (target.app_metadata?.role === "developer") {
+    return Response.json(
+      { error: "La cuenta de desarrolladora está protegida." },
+      { status: 403 },
     );
   }
   // Guarda 2: el fundador es el `created_at` mínimo de la lista COMPLETA.

@@ -6,7 +6,7 @@ import "./globals.css";
 const appSans = DM_Sans({ subsets: ["latin"], variable: "--font-app-sans" });
 const appDisplay = Fraunces({ subsets: ["latin"], variable: "--font-app-display" });
 export const metadata: Metadata = {
-  title: "Buen Negocio | Gestión sencilla",
+  title: "Sistema de la Tienda Don Juan",
   description: "Inventario y ventas en un solo lugar.",
 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -9,14 +9,14 @@
  * la barra de direcciones, sin saber que el link se venció ni que la salida
  * (`/forgot-password`) estaba a un click.
  *
- * Es PLOMERÍA (se pisa siempre): es superficie de contrato de la plataforma,
+ * Es parte del flujo de autenticación de la aplicación,
  * no la cara del negocio. La URL es `/auth/acceso?motivo=<codigo>&flujo=<type>`.
  *
  * **Vive en `/auth/*` y no en `/acceso` a propósito.** `/acceso` es una palabra
  * común en castellano y ya es una pantalla del NEGOCIO en un molde vivo (la
  * puerta por DNI de `cuota-recurrente`): declararla pública abriría esa
  * pantalla sin sesión en toda app que la tenga. `/auth/*` ya es namespace de la
- * plataforma —esta página es la hermana de confirm y callback, el lugar donde
+ * de autenticación —esta página es la hermana de confirm y callback, el lugar donde
  * aterrizan sus fallos—, así que no puede chocar con nada del dueño.
  *
  * Por lo mismo NO está en el route group `(auth)` y no hereda su layout: trae

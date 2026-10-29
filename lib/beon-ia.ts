@@ -1,15 +1,3 @@
-// ============================================================
-// PLATFORM FILE — lib/beon-ia.ts
-// Generado e inyectado por TuSistema. NO editar ni reescribir:
-// importá `extraerDatos` / `preguntarIA` y usalos tal cual. La
-// llamada sale por el proxy de la plataforma con el token del
-// proyecto: la app no tiene ninguna API key de IA. El uso se
-// cobra en créditos al dueño del sistema.
-//
-// NO importa `lib/beon-tools.ts` a propósito: en apps viejas ese
-// archivo puede ser un helper propio del agente con otra forma.
-// Este es self-contained.
-// ============================================================
 export type TipoCampo = "texto" | "numero" | "fecha" | "moneda" | "lista";
 export interface Campo {
   /** Nombre de la clave en el objeto de salida. Usá el nombre real de tu columna. */
@@ -43,11 +31,10 @@ export type ResultadoExtraccion =
       /** Inconsistencias que la lectura notó ("el total no coincide con la suma de ítems"). */
       observaciones: string[];
     }
-  | { ok: false; code: ErrorIA; message: string; creditsUrl?: string };
+  | { ok: false; code: ErrorIA; message: string };
 export type ResultadoPregunta =
   | { ok: true; texto?: string; datos?: unknown }
-  | { ok: false; code: ErrorIA; message: string; creditsUrl?: string };
-const CREDITS_URL = "https://tusistema.ai/creditos";
+  | { ok: false; code: ErrorIA; message: string };
 /** Tope por archivo. Vercel corta el body de una función en 4,5 MB. */
 export const MAX_BYTES_POR_ARCHIVO = 4 * 1024 * 1024;
 export const MAX_ARCHIVOS = 3;
@@ -181,7 +168,7 @@ async function llamarProxy(
   helper: "extraer" | "preguntar",
   cuerpo: Record<string, unknown>,
 ): Promise<
-  { ok: true; texto: string } | { ok: false; code: ErrorIA; message: string; creditsUrl?: string }
+  { ok: true; texto: string } | { ok: false; code: ErrorIA; message: string }
 > {
   const p = proxy();
   if (!p) {
@@ -207,8 +194,7 @@ async function llamarProxy(
     return {
       ok: false,
       code: "insufficient_credits",
-      message: "El dueño del sistema se quedó sin créditos en TuSistema.",
-      creditsUrl: CREDITS_URL,
+      message: "El servicio de IA no tiene saldo disponible. Revisa su configuración.",
     };
   }
   if (res.status === 429) {

@@ -1,21 +1,6 @@
-// Inyectado por el pipeline de TuSistema.AI. Manifest de la PWA: es lo que
-// le dice al sistema operativo cómo se llama la app, con qué icono
-// mostrarla y que abra a pantalla completa.
-// NO modificar — sobreescrito automáticamente en cada iteración.
-//
-// Es una convención de archivo del App Router: Next sirve esto en
-// /manifest.webmanifest e inyecta el <link rel="manifest"> en el <head>
-// solo, sin que nadie tenga que editar app/layout.tsx.
-//
-// La identidad sale de env vars que inyecta el deploy pipeline, no de un
-// archivo que escriba el agente: la plataforma ya sabe el nombre real del
-// proyecto y meter al LLM en el medio solo agregaría variabilidad.
+// Web App Manifest for installable PWA support.
 import type { MetadataRoute } from "next";
-/** Recorta a ~12 chars por palabras enteras. Es el texto que va DEBAJO del
- *  icono en la pantalla de inicio, y un corte a mitad de palabra
- *  ("Ferretería S") se ve roto. Espeja `pwa_short_name` del backend
- *  (`services/pwa_nombre.py`) para que el fallback no sea peor que el valor
- *  inyectado. */
+/** Trims the short name at word boundaries for the home-screen label. */
 const CONECTORES = [
   "de", "del", "la", "el", "los", "las", "y", "a", "en", "con", "para",
 ];

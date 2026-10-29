@@ -5,8 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/locale";
+import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export default async function CustomersPage() {
+  await requirePagePermission("customers:manage");
   const customers = await db.cliente.findMany({ orderBy: [{ isActive: "desc" }, { name: "asc" }], take: 200, include: { sales: { where: { status: "completada" }, select: { total: true } } } });
   const activeCustomers = customers.filter((customer) => customer.isActive).length;
   const customersWithSales = customers.filter((customer) => customer.sales.length > 0).length;

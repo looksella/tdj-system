@@ -1,16 +1,4 @@
-// Inyectado por el pipeline de TuSistema.AI. Genera los iconos de la PWA.
-// NO modificar — sobreescrito automáticamente en cada iteración.
-//
-// Los tres tamaños se generan on-demand con ImageResponse (el motor de
-// next/og, que ya viene con Next) a partir del logo o de las iniciales del
-// nombre, y el color de marca. Elegido así a propósito: sin pipeline de
-// imágenes, sin blob storage, sin assets binarios en el repo del cliente y
-// sin una llamada a un modelo de imágenes por proyecto. Costo de infra: cero.
-//
-// Convención de archivo del App Router: Next expone /icon/<id> por cada id
-// de generateImageMetadata e inyecta los <link rel="icon"> sin tocar
-// app/layout.tsx. El id es `<variante>-<versión>` (ver versionDelIcono):
-// 0 = 192, 1 = 512, 2 = 512 maskable.
+// Generates installable PWA icons on demand from the configured logo or initials.
 import { ImageResponse } from "next/og";
 /**
  * La versión del ícono: un hash corto de lo que dibuja (nombre, color y logo).
@@ -98,9 +86,7 @@ export default async function Icon({ id }: { id: string }) {
   const variante = String(id).split("-")[0];
   const maskable = variante === "2";
   const name = process.env.NEXT_PUBLIC_APP_NAME || "Mi sistema";
-  // El default es el azul de la plataforma, NO un negro neutro: es lo que ve
-  // un proyecto sin marca, y un cuadrado negro con dos letras no se parece a
-  // un producto. La var la inyecta el deploy pipeline cuando la conoce.
+  // Use the configured theme color or the standard blue fallback.
   const themeColor = process.env.NEXT_PUBLIC_APP_THEME_COLOR || "#0074E8";
   const size = variante === "0" ? 192 : 512;
   // El icono maskable (id 2) lo recorta el sistema operativo hasta un 20%

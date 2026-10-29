@@ -21,23 +21,25 @@ const ETIQUETA: Record<Estado, string> = {
   abrio_sin_activar: at.usuarios.estadoAbrioSinActivar,
   pendiente: at.usuarios.estadoPendiente,
 };
+function etiquetaRol(role: string) {
+  if (role === "developer") return at.usuarios.rolDesarrolladora;
+  if (role === "admin") return at.usuarios.rolAdmin;
+  if (role === "employee") return at.usuarios.rolEmpleado;
+  return at.usuarios.rolSinPermisos;
+}
 /**
  * Panel de gestión de usuarios: listado con el estado real de cada cuenta,
  * invitación (por email o por link), re-envío del link a quien todavía no
  * eligió contraseña, y baja.
  *
- * Sin dependencias de UI a propósito (ni toasts ni íconos): este archivo lo
- * escribe el pipeline sobre apps que no controlamos, así que solo usa HTML y
- * las clases de Tailwind que el scaffold garantiza. Los avisos van inline.
+ * Sin dependencias de UI adicionales: los avisos se muestran inline.
  */
 export function UsuariosPanel({ roles }: { roles: string[] }) {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [cargando, setCargando] = useState(true);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState(roles[0] ?? "customer");
-  // Arranca en "email" a propósito: es el camino robusto (sale por el servidor
-  // de la plataforma, sin el tope de 2/hora del Supabase gratuito) y el link a
-  // mano queda como la alternativa explícita.
+  // Email invitation is the default; sharing a generated link remains available.
   const [method, setMethod] = useState<"email" | "link">("email");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,7 +176,7 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
             >
               {roles.map((r) => (
                 <option key={r} value={r}>
-                  {r}
+                  {etiquetaRol(r)}
                 </option>
               ))}
             </select>
@@ -260,14 +262,14 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
                 {usuarios.map((u) => (
                   <tr key={u.id} className="border-t align-top">
                     <td className="px-3 py-2">{u.email}</td>
-                    <td className="px-3 py-2">{u.role}</td>
+                    <td className="px-3 py-2">{etiquetaRol(u.role)}</td>
                     <td className="px-3 py-2">{ETIQUETA[u.estado]}</td>
                     <td className="px-3 py-2">
                       {new Date(u.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex flex-wrap justify-end gap-2">
-                        {u.estado !== "activo" && (
+                        {u.role !== "developer" && u.estado !== "activo" && (
                           <button
                             type="button"
                             onClick={() => void copiarLinkDe(u.email)}
@@ -278,13 +280,13 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
                               : at.usuarios.reenviarLink}
                           </button>
                         )}
-                        <button
+                        {u.role !== "developer" ? <button
                           type="button"
                           onClick={() => abrirBaja(u)}
                           className="rounded-md border px-2 py-1 text-xs font-medium"
                         >
                           {at.usuarios.quitar}
-                        </button>
+                        </button> : <span className="text-xs text-muted-foreground">{at.usuarios.rolProtegido}</span>}
                       </div>
                       {quitando === u.id && (
                         <div className="mt-2 space-y-2 text-left">

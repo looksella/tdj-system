@@ -1,15 +1,13 @@
-// Inyectado por el pipeline de TuSistema.AI. Sirve el service worker que
-// hace instalable a la app (PWA).
-// NO modificar — sobreescrito automáticamente en cada iteración.
+// Serves the PWA service worker with a cache name tied to each deploy.
 //
-// Por qué un route handler y no public/sw.js: el nombre del cache tiene que
+// A route handler is used instead of public/sw.js because the cache name must
 // incluir el id del deploy para que cada deploy invalide el cache anterior
 // solo. Un archivo estático en public/ no puede leer env vars, así que el
 // cache quedaría fijo y el usuario se quedaría pegado a una versión vieja
 // del shell. Servido desde acá, el contenido del SW cambia byte-a-byte en
 // cada deploy → el browser detecta un SW nuevo y descarta el viejo.
 //
-// Reglas del cache (no negociables, ver más abajo en el fetch handler):
+// Cache rules:
 //   - Nunca se cachea una respuesta de navegación: puede tener datos de
 //     sesión, y un dispositivo compartido (el iPad del mostrador) los
 //     mostraría al siguiente usuario.

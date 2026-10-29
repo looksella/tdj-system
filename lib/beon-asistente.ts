@@ -1,12 +1,3 @@
-// ============================================================
-// PLATFORM FILE — lib/beon-asistente.ts
-// Generado e inyectado por TuSistema. NO editar ni reescribir.
-// Es el cliente del módulo "Asistente IA": habla con el proxy de
-// la plataforma con el token del proyecto, así que la app no
-// tiene ninguna API key ni acceso directo a la IA. La consulta a
-// la base la resuelve la plataforma en modo SOLO LECTURA — desde
-// acá no se puede escribir nada.
-// ============================================================
 export type AsistenteKind = "data" | "system" | "derived";
 export type AsistenteRespuesta =
   | {
@@ -28,7 +19,6 @@ export type AsistenteRespuesta =
         | "not_published"
         | "error";
       message: string;
-      creditsUrl?: string;
     };
 export interface AsistenteConfig {
   enabled: boolean;
@@ -36,7 +26,6 @@ export interface AsistenteConfig {
   creditsPerQuestionHint: string;
   ownerHasCredits: boolean;
 }
-const CREDITS_URL = "https://tusistema.ai/creditos";
 /** Env vars leídas al llamar, no al cargar el módulo: el App Router las
  *  resuelve por request y a nivel módulo pueden ser undefined. */
 function proxy(): { url: string; key: string } | null {
@@ -76,8 +65,7 @@ export async function preguntar(input: {
     return {
       ok: false,
       code: "insufficient_credits",
-      message: "El dueño del sistema se quedó sin créditos en TuSistema.",
-      creditsUrl: CREDITS_URL,
+      message: "El servicio del asistente no tiene saldo disponible. Revisa su configuración.",
     };
   }
   if (res.status === 429) {
@@ -155,13 +143,7 @@ export async function configuracion(): Promise<AsistenteConfig> {
     return apagado;
   }
 }
-/**
- * Genera las 3 preguntas de ejemplo contra ESTE sistema (su schema y su
- * manual). Es gratis para el dueño y la plataforma la cachea por versión, así
- * que llamarla de más no cuesta ni una llamada al modelo.
- *
- * Nunca levanta: sin sugerencias la página se dibuja igual, sin chips.
- */
+/** Generates suggested questions for the current system. */
 export async function generarSugerencias(
   env: "sandbox" | "production",
   locale: "es" | "pt",

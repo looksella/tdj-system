@@ -1,15 +1,4 @@
 "use client";
-// ============================================================
-// PLATFORM FILE — components/beon/cargar-desde-archivo.tsx
-// Generado e inyectado por TuSistema. NO editar ni reescribir.
-// La parte genérica de "cargar datos desde una foto o un PDF":
-// adjuntar, achicar la foto, leerla con IA, mostrar los campos
-// para revisar y confirmar. Lo específico de cada negocio (a qué
-// tablas va, qué se crea si no existe) va en `onConfirmar`.
-//
-// Solo Tailwind del scaffold: no importa nada de la app para que
-// la pieza no se rompa cuando el sistema cambia.
-// ============================================================
 import { useRef, useState } from "react";
 export type TipoCampo = "texto" | "numero" | "fecha" | "moneda" | "lista";
 export interface Campo {
@@ -45,7 +34,6 @@ const COPY = {
     quitar: "Quitar",
     confianzaBaja: "El archivo se leía con dificultad. Revisá bien los valores antes de confirmar.",
     costo: "Leer un archivo usa ≈ 0,3 créditos.",
-    sinCreditos: "Cargar créditos",
     errorGuardar: "No pudimos guardar. Probá de nuevo.",
     vacio: "No pude leer ningún campo de este archivo. Probá con otra foto.",
   },
@@ -61,7 +49,6 @@ const COPY = {
     quitar: "Remover",
     confianzaBaja: "O arquivo estava difícil de ler. Confira bem os valores antes de confirmar.",
     costo: "Ler um arquivo usa ≈ 0,3 créditos.",
-    sinCreditos: "Adicionar créditos",
     errorGuardar: "Não conseguimos salvar. Tente de novo.",
     vacio: "Não consegui ler nenhum campo deste arquivo. Tente outra foto.",
   },
@@ -126,7 +113,7 @@ export function CargarDesdeArchivo({
   const [filas, setFilas] = useState<Record<string, Array<Record<string, string>>>>({});
   const [confianza, setConfianza] = useState<"alta" | "media" | "baja">("alta");
   const [observaciones, setObservaciones] = useState<string[]>([]);
-  const [error, setError] = useState<{ message: string; creditsUrl?: string } | null>(null);
+  const [error, setError] = useState<{ message: string } | null>(null);
   const simples = campos.filter((c) => c.tipo !== "lista");
   const listas = campos.filter((c) => c.tipo === "lista");
   function limpiar() {
@@ -160,9 +147,9 @@ export function CargarDesdeArchivo({
       });
       const data = (await res.json()) as
         | { ok: true; datos: Record<string, unknown>; confianza: "alta" | "media" | "baja"; observaciones: string[] }
-        | { ok: false; code: string; message: string; creditsUrl?: string };
+        | { ok: false; code: string; message: string };
       if (!data.ok) {
-        setError({ message: data.message, creditsUrl: data.creditsUrl });
+        setError({ message: data.message });
         setEstado("vacio");
         return;
       }
@@ -247,17 +234,7 @@ export function CargarDesdeArchivo({
       </div>
       {error ? (
         <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm">
-          <span>{error.message}</span>
-          {error.creditsUrl ? (
-            <a
-              href={error.creditsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-2 font-medium underline"
-            >
-              {t.sinCreditos}
-            </a>
-          ) : null}
+          {error.message}
         </div>
       ) : null}
       {estado === "leyendo" ? (

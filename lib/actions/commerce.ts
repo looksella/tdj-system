@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { guardAccion } from "@/lib/guard-autorizacion";
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -26,6 +27,8 @@ function productInput(formData: FormData) {
   };
 }
 export async function createProduct(formData: FormData) {
+  const denial = await guardAccion("inventory:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.producto.create({ data: productInput(formData) });
     revalidatePath("/inventario");
@@ -36,6 +39,8 @@ export async function createProduct(formData: FormData) {
   }
 }
 export async function updateProduct(id: string, formData: FormData) {
+  const denial = await guardAccion("inventory:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.producto.update({ where: { id }, data: productInput(formData) });
     revalidatePath("/inventario");
@@ -46,6 +51,8 @@ export async function updateProduct(id: string, formData: FormData) {
   }
 }
 export async function archiveProduct(id: string) {
+  const denial = await guardAccion("inventory:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.producto.update({ where: { id }, data: { isActive: false } });
     revalidatePath("/inventario");
@@ -56,6 +63,8 @@ export async function archiveProduct(id: string) {
   }
 }
 export async function adjustStock(id: string, delta: number, note: string) {
+  const denial = await guardAccion("inventory:manage");
+  if (denial) return { ok: false, message: denial };
   if (!Number.isInteger(delta) || delta === 0) return { ok: false, message: "Indica una cantidad entera distinta de cero." };
   try {
     const result = await db.$transaction(async (tx) => {
@@ -74,6 +83,8 @@ export async function adjustStock(id: string, delta: number, note: string) {
   }
 }
 export async function searchPosProducts(term: string) {
+  const denial = await guardAccion("pos:read");
+  if (denial) throw new Error(denial);
   const cleanTerm = term.trim();
   if (cleanTerm.length < 2) return [];
   const products = await db.producto.findMany({
@@ -86,6 +97,8 @@ export async function searchPosProducts(term: string) {
 }
 export type CheckoutLine = { productId: string; quantity: number };
 export async function createSale(lines: CheckoutLine[], paymentMethod: string, cashReceivedCents?: number, expectedTotalCents?: number) {
+  const denial = await guardAccion("sales:create");
+  if (denial) return { ok: false, message: denial };
   const allowedMethods = ["Efectivo", "Tarjeta", "Transferencia", "Otro"];
   if (!Array.isArray(lines) || !lines.length || !allowedMethods.includes(paymentMethod)) return { ok: false, message: "Agrega productos y elige una forma de pago." };
   if (paymentMethod === "Efectivo" && (
@@ -130,6 +143,8 @@ export async function createSale(lines: CheckoutLine[], paymentMethod: string, c
   }
 }
 export async function cancelSale(id: string) {
+  const denial = await guardAccion("sales:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.$transaction(async (tx) => {
       const sale = await tx.venta.findUnique({ where: { id }, include: { lines: true } });
@@ -149,6 +164,8 @@ export async function cancelSale(id: string) {
   }
 }
 export async function changeSalePayment(id: string, paymentMethod: string) {
+  const denial = await guardAccion("sales:manage");
+  if (denial) return { ok: false, message: denial };
   if (!["Efectivo", "Tarjeta", "Transferencia", "Otro"].includes(paymentMethod)) return { ok: false, message: "Elige una forma de pago válida." };
   try {
     const sale = await db.venta.findUnique({ where: { id }, select: { status: true } });
@@ -193,6 +210,8 @@ async function applyPurchaseStock(tx: Prisma.TransactionClient, deltas: Map<stri
   }
 }
 export async function createPurchase(input: PurchaseInput) {
+  const denial = await guardAccion("purchases:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     const purchase = await db.$transaction(async (tx) => {
       const parsed = purchaseInput(input);
@@ -212,6 +231,8 @@ export async function createPurchase(input: PurchaseInput) {
   }
 }
 export async function updatePurchase(id: string, input: PurchaseInput) {
+  const denial = await guardAccion("purchases:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.$transaction(async (tx) => {
       const parsed = purchaseInput(input);
@@ -248,6 +269,8 @@ function supplierInput(formData: FormData) {
   };
 }
 export async function createSupplier(formData: FormData) {
+  const denial = await guardAccion("suppliers:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.proveedor.create({ data: supplierInput(formData) });
     revalidatePath("/proveedores");
@@ -257,6 +280,8 @@ export async function createSupplier(formData: FormData) {
   }
 }
 export async function updateSupplier(id: string, formData: FormData) {
+  const denial = await guardAccion("suppliers:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.proveedor.update({ where: { id }, data: supplierInput(formData) });
     revalidatePath("/proveedores");
@@ -276,6 +301,8 @@ function supplierPriceInput(formData: FormData) {
   return { supplierId, productId, unitCost: unitCost.toFixed(2), minimumQuantity, note: text(formData.get("note")) || null };
 }
 export async function createSupplierPrice(formData: FormData) {
+  const denial = await guardAccion("prices:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     const input = supplierPriceInput(formData);
     await db.precioProveedor.create({ data: input });
@@ -286,6 +313,8 @@ export async function createSupplierPrice(formData: FormData) {
   }
 }
 export async function updateSupplierPrice(id: string, formData: FormData) {
+  const denial = await guardAccion("prices:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     const input = supplierPriceInput(formData);
     await db.precioProveedor.update({ where: { id }, data: input });
@@ -307,6 +336,8 @@ function customerInput(formData: FormData) {
   };
 }
 export async function createCustomer(formData: FormData) {
+  const denial = await guardAccion("customers:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.cliente.create({ data: customerInput(formData) });
     revalidatePath("/clientes");
@@ -316,6 +347,8 @@ export async function createCustomer(formData: FormData) {
   }
 }
 export async function updateCustomer(id: string, formData: FormData) {
+  const denial = await guardAccion("customers:manage");
+  if (denial) return { ok: false, message: denial };
   try {
     await db.cliente.update({ where: { id }, data: customerInput(formData) });
     revalidatePath("/clientes");

@@ -1,14 +1,4 @@
-// ============================================================
-// PLATFORM FILE — lib/beon-storage-client.ts
-// Generado e inyectado por TuSistema. NO editar ni reescribir.
-//
-// Lado NAVEGADOR de la subida de archivos: hace el PUT del archivo
-// DIRECTO al bucket con la URL firmada que emitió el server
-// (`crearSubidaFirmada` de lib/beon-storage.ts). No lee env vars ni
-// secretos: la URL ya lleva el permiso. Se importa desde componentes
-// "use client". Los bytes nunca pasan por un Server Action ni por un
-// Route Handler (límite de 1 MB / 4,5 MB): por eso existe este archivo.
-// ============================================================
+// Browser-side Supabase Storage upload helper. It never reads secrets.
 export interface SubidaFirmada {
   path: string;
   uploadUrl: string;

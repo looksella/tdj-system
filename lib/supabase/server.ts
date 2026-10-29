@@ -10,12 +10,7 @@ import { LOGIN_ACTIVO } from "./estado";
  * revienta con un TypeError en runtime.
  */
 export async function createServerClient() {
-  // Con el login dormido (app publicada sin plan, sin env vars de Supabase)
-  // la librería tiraría `supabaseUrl is required`. Esto lo convierte en una
-  // frase legible en los logs de Vercel (la pantalla sigue siendo el
-  // global-error genérico: Next la reemplaza por un digest). El camino sano
-  // no cambia.
-  if (!LOGIN_ACTIVO) throw new Error(at.comun.loginDormidoServidor);
+  if (!LOGIN_ACTIVO) throw new Error(at.comun.supabaseNoConfiguradoServidor);
   const cookieStore = await cookies();
   return _createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

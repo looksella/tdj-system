@@ -1,11 +1,4 @@
-// ============================================================
-// PLATFORM FILE — lib/beon-email.ts
-// Generado e inyectado por TuSistema. NO editar ni reescribir:
-// importá `sendEmail` y usalo tal cual. Los mails salen por el
-// proxy de la plataforma con el token del proyecto: la app no
-// tiene ninguna API key de email y no puede elegir el remitente
-// (el From es siempre "{tu negocio} vía TuSistema.AI").
-// ============================================================
+// Optional server-side email client for the configured BEON Tools service.
 export interface SendEmailInput {
   /** Uno o varios destinatarios (máximo 5 por envío). */
   to: string | string[];
@@ -19,7 +12,7 @@ export interface SendEmailInput {
 }
 export interface SendEmailResult {
   id: string | null;
-  /** Cuántos emails del mes van enviados, y cuántos incluye el plan. */
+  /** Monthly email usage returned by the mail service. */
   usage: { sent_this_month: number; free_monthly: number };
 }
 /**
@@ -27,8 +20,8 @@ export interface SendEmailResult {
  * Handler): nunca desde un componente `"use client"`.
  *
  * Errores que conviene mostrarle al usuario tal cual:
- *  - 402: el dueño se quedó sin créditos en TuSistema.
- *  - 429: se alcanzó el tope diario de emails de este sistema (anti-spam).
+ *  - 402: el servicio de correo no tiene saldo disponible.
+ *  - 429: se alcanzó el tope diario de emails (anti-spam).
  *  - 503: el envío de emails no está habilitado para este sistema.
  */
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
@@ -49,9 +42,9 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       ...(input.replyTo ? { reply_to: input.replyTo } : {}),
     }),
   });
-  if (res.status === 402) throw new Error("El dueño del sistema se quedó sin créditos en TuSistema. Cargá créditos en tusistema.ai/creditos.");
+  if (res.status === 402) throw new Error("El servicio de correo no tiene saldo disponible.");
   if (res.status === 429) {
-    // Dos topes distintos: el de ESTE sistema y el global de la plataforma.
+    // Distinguish the per-system cap from the provider-wide cap.
     let code = "";
     try {
       const body = (await res.json()) as { detail?: { error?: string } };
@@ -61,7 +54,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     }
     throw new Error(
       code === "platform_email_cap_reached"
-        ? "El envío de emails está pausado por un límite diario de la plataforma (no es un límite de tu sistema). Se reanuda mañana."
+        ? "El proveedor de correo alcanzó su límite diario. Se reanuda mañana."
         : "Este sistema alcanzó el tope diario de emails. Se reanuda mañana.",
     );
   }

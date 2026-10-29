@@ -7,11 +7,6 @@ import { usePathname } from "next/navigation";
  *
  * Hereda la paleta del proyecto vía `bg-primary`: cambiar `--primary` en
  * `globals.css` cambia la barra, sin tocar este archivo.
- *
- * El guard `__beonVeditActive` es la razón por la que este componente vive en
- * el scaffold y no lo escribe el agente: es un flag que setea el editor visual
- * de la plataforma, y sin él el progreso arranca al clickear en modo edición y
- * queda colgado para siempre.
  */
 export function NavigationProgress() {
   const pathname = usePathname();
@@ -43,9 +38,6 @@ export function NavigationProgress() {
   }, [pathname, complete]);
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if ((window as unknown as { __beonVeditActive?: boolean }).__beonVeditActive) {
-        return;
-      }
       const target = e.target as HTMLElement | null;
       const anchor = target?.closest("a");
       if (!anchor) return;

@@ -1,23 +1,19 @@
-// ============================================================
-// PLATFORM FILE — app/api/beon/ia/extraer/route.ts
-// Generado e inyectado por TuSistema. NO editar ni reescribir.
-// Es el puente entre la pieza `<CargarDesdeArchivo>` (navegador)
-// y `extraerDatos` (servidor): el navegador no puede hablar con
-// el proxy porque el token del proyecto es server-only.
-//
-// No importa nada de la app ni del overlay de auth a propósito:
-// tiene que buildear en TODO sistema, tenga o no login. Su
-// exposición es la misma que la de cualquier ruta de esa app; el
-// gate real es el proxy (token por sistema, límite por minuto y
-// fusible diario de créditos).
-// ============================================================
+// Extracts structured data from uploaded files using the configured AI service.
 import { NextResponse } from "next/server";
 import { extraerDatos, MAX_ARCHIVOS, type ArchivoEntrada, type Campo } from "@/lib/beon-ia";
-// Leer una factura larga en PDF es la llamada de IA más lenta de una app.
-// 300 es el mismo techo que la plataforma le exige a cualquier ruta que use IA.
+import { isAllowed } from "@/lib/auth-helpers";
+import { getEffectiveUser } from "@/lib/supabase/helpers";
+// PDF extraction can take longer than ordinary API requests.
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
+  const user = await getEffectiveUser();
+  if (!user) {
+    return NextResponse.json({ ok: false, code: "unauthorized", message: "Inicia sesión para continuar." }, { status: 401 });
+  }
+  if (!isAllowed(user.role, "assistant:access")) {
+    return NextResponse.json({ ok: false, code: "forbidden", message: "No tienes permiso para usar esta función." }, { status: 403 });
+  }
   let body: {
     archivos?: ArchivoEntrada[];
     campos?: Campo[];

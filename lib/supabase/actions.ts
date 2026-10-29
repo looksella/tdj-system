@@ -13,8 +13,7 @@ import { createServerClient } from "./server";
  * El redirect es lo que borra las cookies, vía el response del servidor.
  */
 export async function signOut() {
-  // En una app abierta (login dormido) no hay sesión que cerrar. Mandar a
-  // `/sign-in` mostraría <LoginInactivo>, confuso para quien apretó "Salir".
+  // There is no session to sign out from when Supabase Auth is not configured.
   if (!LOGIN_ACTIVO) redirect("/");
   const supabase = await createServerClient();
   await supabase.auth.signOut();

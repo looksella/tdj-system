@@ -5,8 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/locale";
+import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export default async function PurchasesPage() {
+  await requirePagePermission("purchases:manage");
   const [purchases, products] = await Promise.all([
     db.compra.findMany({ orderBy: { purchasedAt: "desc" }, take: 50, include: { lines: { include: { product: { select: { name: true, sku: true } } } } } }),
     db.producto.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, take: 1200, select: { id: true, sku: true, name: true, purchasePrice: true } }),

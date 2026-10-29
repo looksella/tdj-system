@@ -1,25 +1,4 @@
-// ============================================================
-// PLATFORM FILE — lib/beon-tools.ts
-// Generado e inyectado por TuSistema. NO editar ni reescribir:
-// importá `beonTools` y usalo tal cual. El contrato del proxy es
-// POST ${BEON_TOOLS_URL}/v1/{tool}/{operation} y este archivo es
-// la pieza canónica de la app para hablar con él.
-//
-// Única excepción autorizada: el helper server-side `lib/afip.ts` que
-// describe el playbook de ARCA puede llamar al mismo proxy para la
-// CONSULTA DE PADRÓN (`/v1/afip/consult_taxpayer`). Existe porque este
-// archivo es create_only —una app ya creada no recibe métodos nuevos—,
-// y porque esa consulta necesita conservar el error estructurado
-// (`kind`/`retryable`/`status`) que `callTool` aplana a un Error de texto.
-// La misma excepción vale para el helper fiscal que un playbook curado de
-// otro país defina con su propio `call()` al proxy (necesita conservar
-// `kind`/`retryable`/`action` para decidir si ofrece reintentar: reintentar
-// una emisión sin llave de idempotencia factura dos veces). Esos bloques NO
-// vienen en este archivo: la facturación electrónica fuera de Argentina no es
-// un servicio de la plataforma, y el agente la integra como cualquier otra API.
-// Ninguna otra pieza habla con el proxy, y la emisión de comprobantes sigue
-// pasando solo por acá o por el `call` de esos helpers.
-// ============================================================
+// Optional server-side client for external BEON Tools services.
 export interface ToolResponse<T = any> {
   result: T;
   usage: { tool: string; operation: string; cost_usd: number; balance_remaining_usd: number };
@@ -43,7 +22,7 @@ async function callTool<T = any>(tool: string, operation: string, params: Record
     headers: { "Authorization": `Bearer ${TOOLS_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  if (res.status === 402) throw new Error("El dueño del sistema se quedó sin créditos en TuSistema. Cargá créditos en tusistema.ai/creditos.");
+  if (res.status === 402) throw new Error("El servicio externo no tiene saldo disponible.");
   if (res.status === 429) throw new Error("Demasiadas solicitudes. Esperá unos segundos.");
   if (!res.ok) {
     // Superficie del error real (status + detalle del proxy) para que el

@@ -8,8 +8,7 @@
  * Ahora el `GET` no toca Supabase y manda acá; el token se consume recién
  * cuando alguien aprieta el botón, que hace `POST /auth/confirm`.
  *
- * Es PLOMERÍA (se pisa siempre) aunque sea una página: es superficie de
- * contrato de la plataforma —la escribe `/auth/confirm` y su botón vuelve
+ * Es parte del flujo de autenticación: la escribe `/auth/confirm` y su botón vuelve
  * ahí—, no la cara del negocio. Y siendo una ruta NUEVA, cualquier otra
  * política la dejaría sin llegar a los proyectos que YA tienen el molde, que
  * son justo los que hoy sufren el bug.
@@ -21,7 +20,7 @@
  * esperable en una app hecha por el agente libre), y una `app/confirmar/page.tsx`
  * del negocio chocaría con esta —los route groups NO afectan la URL— y rompería
  * el `npm run build` de una app publicada que hoy anda. `/auth/*` ya es
- * namespace de la plataforma: ahí el único archivo posible es el nuestro.
+ * namespace de autenticación de la aplicación, separado de las rutas del negocio.
  *
  * Por lo mismo NO está en el route group `(auth)` y no hereda su layout: trae
  * su propio contenedor centrado, el mismo que ese layout aplica.
