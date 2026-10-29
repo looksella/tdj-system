@@ -72,4 +72,9 @@ Las funciones opcionales de asistente, lectura de archivos, correo y calendario 
 
 `npm run setup` sincroniza el esquema de Prisma en la base configurada; úsalo solo de forma consciente y con respaldo si la base ya contiene datos. `npm run build` genera el cliente Prisma y compila Next.js, sin conectarse ni modificar la base de datos.
 
-En Vercel, configura `DATABASE_URL` y `DIRECT_DATABASE_URL` en **Settings → Environment Variables** para los entornos que usarán la aplicación. La base debe aceptar conexiones desde el despliegue. Los cambios de esquema se aplican por separado con `npm run setup` desde un entorno que pueda acceder a PostgreSQL; no durante el build.
+En Vercel, configura `DATABASE_URL` y `DIRECT_DATABASE_URL` en **Settings → Environment Variables** para los entornos que usarán la aplicación:
+
+- `DATABASE_URL`: usa la cadena **Transaction pooler** de Supabase (puerto `6543`) para las funciones serverless. Agrega `pgbouncer=true` a la cadena; si ya tiene parámetros, usa `&pgbouncer=true`.
+- `DIRECT_DATABASE_URL`: usa la cadena **Session pooler** (puerto `5432`) o una conexión directa accesible desde el entorno donde ejecutarás `npm run setup`. El host directo `db.<project-ref>.supabase.co:5432` puede no aceptar conexiones desde redes IPv4 sin el complemento IPv4.
+
+Obtén ambas cadenas en Supabase → **Connect**; no construyas manualmente el host o el usuario del pooler. Reemplaza el marcador de contraseña, codificando caracteres especiales de la contraseña en la URI, y no publiques estas cadenas. Los cambios de esquema se aplican por separado con `npm run setup` desde un entorno que pueda acceder a PostgreSQL; no durante el build.
