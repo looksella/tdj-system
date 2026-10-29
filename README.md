@@ -70,4 +70,6 @@ Las funciones opcionales de asistente, lectura de archivos, correo y calendario 
 
 ## Nota sobre la base de datos
 
-`npm run setup` sincroniza el esquema de Prisma. El comando `npm run build` también ejecuta `prisma db push --accept-data-loss`; no lo ejecutes contra una base con datos importantes sin respaldo y sin revisar los cambios.
+`npm run setup` sincroniza el esquema de Prisma en la base configurada; úsalo solo de forma consciente y con respaldo si la base ya contiene datos. `npm run build` genera el cliente Prisma y compila Next.js, sin conectarse ni modificar la base de datos.
+
+En Vercel, configura `DATABASE_URL` y `DIRECT_DATABASE_URL` en **Settings → Environment Variables** para los entornos que usarán la aplicación. La base debe aceptar conexiones desde el despliegue. Los cambios de esquema se aplican por separado con `npm run setup` desde un entorno que pueda acceder a PostgreSQL; no durante el build.
