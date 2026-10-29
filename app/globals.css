@@ -123,6 +123,10 @@
 @layer components {
   .panel-shadow { box-shadow: var(--shadow); }
   .display-heading { font-family: var(--font-app-display), serif; }
+  .sidebar-scroll {
+    scrollbar-width: none;
+  }
+  .sidebar-scroll::-webkit-scrollbar { display: none; }
   /* Encabezado chico de tarjeta (turno, caja, planilla). */
   .eyebrow {
     font-size: 10px;
