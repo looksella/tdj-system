@@ -9,6 +9,8 @@
     "postinstall": "prisma generate",
     "setup": "prisma generate && prisma db push --skip-generate --accept-data-loss",
     "seed": "node --env-file=.env prisma/seed.mjs",
+    "check-db": "node --env-file=.env scripts/check-db.mjs",
+    "sincronizar-inventario": "node --env-file=.env scripts/sincronizar-inventario.mjs",
     "create-admin": "node --env-file=.env scripts/create-user.mjs admin",
     "create-developer": "node --env-file=.env scripts/create-user.mjs developer"
   },

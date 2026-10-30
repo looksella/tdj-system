@@ -77,4 +77,19 @@ En Vercel, configura `DATABASE_URL` y `DIRECT_DATABASE_URL` en **Settings → En
 - `DATABASE_URL`: usa la cadena **Transaction pooler** de Supabase (puerto `6543`) para las funciones serverless. Agrega `pgbouncer=true` a la cadena; si ya tiene parámetros, usa `&pgbouncer=true`.
 - `DIRECT_DATABASE_URL`: usa la cadena **Session pooler** (puerto `5432`) o una conexión directa accesible desde el entorno donde ejecutarás `npm run setup`. El host directo `db.<project-ref>.supabase.co:5432` puede no aceptar conexiones desde redes IPv4 sin el complemento IPv4.
 
+Para este proyecto la cadena correcta es `aws-0-us-east-1.pooler.supabase.com` (usuario `postgres.wefcomdosfcrdqpyzyuj`), en `6543` para `DATABASE_URL` y en `5432` para `DIRECT_DATABASE_URL`. Verificala con `npm run check-db`, que muestra el host de cada variable, si publica IPv4 o IPv6 y si la conexión responde.
+
+## Inventario desde las ventas reales
+
+`scripts/sincronizar-inventario.mjs` ordena el catálogo contra el informe del libro de caja (Cashbook) exportado a `.xlsx`:
+
+```powershell
+npm run sincronizar-inventario -- "C:/ruta/Cashbook_Report.xlsx"            # simulación
+npm run sincronizar-inventario -- "C:/ruta/Cashbook_Report.xlsx" --aplicar  # respalda y escribe
+```
+
+Empareja los artículos vendidos con los que ya existen (ignorando acentos, mayúsculas, unidades y plurales), crea los que faltan con el **precio realmente cobrado** (el más repetido del período), los ubica en la categoría que les corresponde, desactiva —sin borrar— los productos que no tuvieron ninguna venta y recalcula el historial de ventas por categoría desde la planilla. Los productos nuevos entran con existencia `0` y un mínimo según rotación, porque el cashbook registra ventas, no conteos.
+
+Antes de escribir deja `prisma/data/backup/productos-<fecha>.csv` y `reconciliacion-<fecha>.csv` con el detalle de cada decisión (nuevo, precio actualizado, desactivado). Los artículos que no se puede afirmar que sean el mismo producto se crean como nuevos: es preferible un nombre repetido a fusionar dos productos distintos.
+
 Obtén ambas cadenas en Supabase → **Connect**; no construyas manualmente el host o el usuario del pooler. Reemplaza el marcador de contraseña, codificando caracteres especiales de la contraseña en la URI, y no publiques estas cadenas. Los cambios de esquema se aplican por separado con `npm run setup` desde un entorno que pueda acceder a PostgreSQL; no durante el build.

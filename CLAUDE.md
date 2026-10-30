@@ -26,4 +26,5 @@ Sistema de gestión para comercio en El Salvador; interfaz en español (tú), mo
 ## Datos y próximas iteraciones
 - Schema en `prisma/schema.prisma`; cliente de base de datos en `lib/db.ts`.
 - Los CSV reales usados para el arranque están en `prisma/data/`; el seed idempotente está en `prisma/seed.mjs` (500 productos y 23 categorías).
+- El catálogo vivo se ordena desde las ventas reales del Cashbook con `npm run sincronizar-inventario -- <archivo.xlsx> [--aplicar]` (`scripts/sincronizar-inventario.mjs`): empareja por nombre normalizado, crea lo faltante con el precio cobrado, desactiva lo que no vendió y recalcula el historial por categoría. Respaldos y detalle en `prisma/data/backup/`.
 - `npm run setup` regenera Prisma y aplica el schema; `npm run seed` carga datos solo en tablas vacías. Configura `DATABASE_URL` y `DIRECT_DATABASE_URL` en `.env`.
