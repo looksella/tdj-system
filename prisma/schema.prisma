@@ -1,63 +1,71 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_DATABASE_URL")
 }
+
 model Categoria {
   id                String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   categoryName      String     @map("category_name")
   itemsSold         Int        @default(0) @map("items_sold")
   totalQuantitySold Int        @default(0) @map("total_quantity_sold")
-  totalRevenue      Decimal    @default(0) @db.Decimal(12, 2) @map("total_revenue")
+  totalRevenue      Decimal    @default(0) @map("total_revenue") @db.Decimal(12, 2)
   createdAt         DateTime   @default(now()) @map("created_at")
-  updatedAt         DateTime   @updatedAt @default(now()) @map("updated_at")
+  updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at")
   products          Producto[]
+
   @@map("categorias")
 }
+
 model Producto {
   id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   sku              String            @unique
   name             String
   description      String?
-  categoryId       String?           @db.Uuid @map("category_id")
-  purchasePrice    Decimal           @default(0) @db.Decimal(12, 2) @map("purchase_price")
-  salePrice        Decimal           @default(0) @db.Decimal(12, 2) @map("sale_price")
+  categoryId       String?           @map("category_id") @db.Uuid
+  purchasePrice    Decimal           @default(0) @map("purchase_price") @db.Decimal(12, 2)
+  salePrice        Decimal           @default(0) @map("sale_price") @db.Decimal(12, 2)
   currentStock     Int               @default(0) @map("current_stock")
   minStock         Int               @default(0) @map("min_stock")
   imageUrl         String?           @map("image_url")
   isActive         Boolean           @default(true) @map("is_active")
   hasExpiry        Boolean           @default(false) @map("has_expiry")
-  expiryDate       DateTime?          @map("expiry_date")
+  expiryDate       DateTime?         @map("expiry_date")
   priceIncludesTax Boolean           @default(false) @map("price_includes_tax")
   createdBy        String?           @map("created_by")
   updatedBy        String?           @map("updated_by")
   createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @default(now()) @map("updated_at")
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at")
   category         Categoria?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   stockMovements   MovimientoStock[]
   saleLines        LineaVenta[]
   purchaseLines    LineaCompra[]
   supplierPrices   PrecioProveedor[]
+
   @@index([categoryId])
   @@index([currentStock, minStock])
   @@map("productos")
 }
+
 model MovimientoStock {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  productId String   @db.Uuid @map("product_id")
+  productId String   @map("product_id") @db.Uuid
   delta     Int
   reason    String
   reference String?
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @default(now()) @map("updated_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
   product   Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+
   @@index([productId, createdAt])
   @@map("movimientos_stock")
 }
+
 model Cliente {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String
@@ -66,76 +74,88 @@ model Cliente {
   notes     String?
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @default(now()) @map("updated_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
   sales     Venta[]
+
   @@index([name])
   @@map("clientes")
 }
+
 model Proveedor {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name         String   @unique
-  contactName  String?  @map("contact_name")
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String            @unique
+  contactName  String?           @map("contact_name")
   phone        String?
   email        String?
-  taxId        String?  @map("tax_id")
+  taxId        String?           @map("tax_id")
   address      String?
-  paymentTerms String?  @map("payment_terms")
+  paymentTerms String?           @map("payment_terms")
   notes        String?
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @default(now()) @map("updated_at")
+  isActive     Boolean           @default(true) @map("is_active")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at")
   prices       PrecioProveedor[]
+
   @@index([name])
   @@map("proveedores")
 }
+
 model PrecioProveedor {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  supplierId      String    @db.Uuid @map("supplier_id")
-  productId       String    @db.Uuid @map("product_id")
-  unitCost        Decimal   @db.Decimal(12, 2) @map("unit_cost")
+  supplierId      String    @map("supplier_id") @db.Uuid
+  productId       String    @map("product_id") @db.Uuid
+  unitCost        Decimal   @map("unit_cost") @db.Decimal(12, 2)
   minimumQuantity Int       @default(1) @map("minimum_quantity")
   note            String?
   quotedAt        DateTime  @default(now()) @map("quoted_at")
   createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @default(now()) @map("updated_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
   supplier        Proveedor @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   product         Producto  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
   @@unique([supplierId, productId])
   @@index([productId, unitCost])
   @@map("precios_proveedor")
 }
+
 model Venta {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  number        Int          @unique @default(autoincrement())
-  customerId    String?      @db.Uuid @map("customer_id")
-  total         Decimal      @db.Decimal(12, 2)
-  paymentMethod String       @map("payment_method")
-  source        String       @default("mostrador")
-  status        String       @default("completada")
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  number        Int            @unique @default(autoincrement())
+  customerId    String?        @map("customer_id") @db.Uuid
+  total         Decimal        @db.Decimal(12, 2)
+  paymentMethod String         @map("payment_method")
+  source        String         @default("mostrador")
+  status        String         @default("completada")
   note          String?
-  soldAt        DateTime     @default(now()) @map("sold_at")
-  createdAt     DateTime     @default(now()) @map("created_at")
-  updatedAt     DateTime     @updatedAt @default(now()) @map("updated_at")
-  customer      Cliente?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  soldAt        DateTime       @default(now()) @map("sold_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at")
+  customer      Cliente?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   lines         LineaVenta[]
+  cashMovement  CashMovement?
+  cashRefunds   CashMovement[] @relation("CashRefundReference")
+
   @@index([soldAt, status])
   @@map("ventas")
 }
+
 model LineaVenta {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  saleId    String   @db.Uuid @map("sale_id")
-  productId String   @db.Uuid @map("product_id")
+  saleId    String   @map("sale_id") @db.Uuid
+  productId String   @map("product_id") @db.Uuid
   quantity  Int
-  unitPrice Decimal  @db.Decimal(12, 2) @map("unit_price")
-  lineTotal Decimal  @db.Decimal(12, 2) @map("line_total")
+  unitPrice Decimal  @map("unit_price") @db.Decimal(12, 2)
+  lineTotal Decimal  @map("line_total") @db.Decimal(12, 2)
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @default(now()) @map("updated_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
   sale      Venta    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product   Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+
   @@index([saleId])
   @@index([productId])
   @@map("lineas_venta")
 }
+
 model Compra {
   id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   number       Int           @unique @default(autoincrement())
@@ -145,23 +165,26 @@ model Compra {
   total        Decimal       @db.Decimal(12, 2)
   purchasedAt  DateTime      @default(now()) @map("purchased_at")
   createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @default(now()) @map("updated_at")
+  updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at")
   lines        LineaCompra[]
+
   @@index([purchasedAt])
   @@index([supplierName])
   @@map("compras")
 }
+
 model LineaCompra {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  purchaseId  String   @db.Uuid @map("purchase_id")
-  productId   String   @db.Uuid @map("product_id")
-  quantity    Int
-  unitCost    Decimal  @db.Decimal(12, 2) @map("unit_cost")
-  lineTotal   Decimal  @db.Decimal(12, 2) @map("line_total")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @default(now()) @map("updated_at")
-  purchase    Compra   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  product     Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  purchaseId String   @map("purchase_id") @db.Uuid
+  productId  String   @map("product_id") @db.Uuid
+  quantity   Int
+  unitCost   Decimal  @map("unit_cost") @db.Decimal(12, 2)
+  lineTotal  Decimal  @map("line_total") @db.Decimal(12, 2)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+  purchase   Compra   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product    Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+
   @@index([purchaseId])
   @@index([productId])
   @@map("lineas_compra")
@@ -178,6 +201,8 @@ enum CashSessionStatus {
 
 enum CashMovementType {
   SALE
+  REFUND
+  INCOME
   EXPENSE
   ADJUSTMENT
 }
@@ -186,6 +211,7 @@ enum PaymentMethod {
   CASH
   CARD
   TRANSFER
+  CREDIT
   OTHER
 }
 
@@ -205,40 +231,46 @@ model Employee {
   email                String?          @unique
   pinHash              String           @map("pin_hash")
   role                 String
-  monthlySalary        Decimal          @db.Decimal(10, 2) @map("monthly_salary")
+  monthlySalary        Decimal          @map("monthly_salary") @db.Decimal(10, 2)
   applyLegalDeductions Boolean          @default(true) @map("apply_legal_deductions")
   scheduledStart       String           @default("08:00") @map("scheduled_start")
   scheduledEnd         String           @default("17:00") @map("scheduled_end")
-  weeklyHours          Decimal          @default(44) @db.Decimal(4, 1) @map("weekly_hours")
+  weeklyHours          Decimal          @default(44) @map("weekly_hours") @db.Decimal(4, 1)
   active               Boolean          @default(true)
   cashSessions         CashSession[]
   attendanceMarks      AttendanceMark[]
   payrollLines         PayrollLine[]
   createdAt            DateTime         @default(now()) @map("created_at")
-  updatedAt            DateTime         @updatedAt @default(now()) @map("updated_at")
+  updatedAt            DateTime         @default(now()) @updatedAt @map("updated_at")
 
   @@map("employees")
 }
 
 model CashSession {
-  id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employeeId           String            @db.Uuid @map("employee_id")
-  employee             Employee          @relation(fields: [employeeId], references: [id])
-  openingMarkId        String?           @unique @db.Uuid @map("opening_mark_id")
-  openingMark          AttendanceMark?   @relation(fields: [openingMarkId], references: [id], onDelete: SetNull)
-  status               CashSessionStatus @default(OPEN)
-  openedAt             DateTime          @default(now()) @map("opened_at")
-  openingFloat         Decimal           @db.Decimal(10, 2) @map("opening_float")
-  openingDenominations Json              @map("opening_denominations")
-  closedAt             DateTime?         @map("closed_at")
-  countedCash          Decimal?          @db.Decimal(10, 2) @map("counted_cash")
-  expectedCash         Decimal?          @db.Decimal(10, 2) @map("expected_cash")
-  difference           Decimal?          @db.Decimal(10, 2)
-  closingDenominations Json?             @map("closing_denominations")
-  notes                String?           @db.Text
-  movements            CashMovement[]
-  createdAt            DateTime          @default(now()) @map("created_at")
-  updatedAt            DateTime          @updatedAt @default(now()) @map("updated_at")
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId            String            @map("employee_id") @db.Uuid
+  employee              Employee          @relation(fields: [employeeId], references: [id])
+  openingMarkId         String?           @unique @map("opening_mark_id") @db.Uuid
+  openingMark           AttendanceMark?   @relation(fields: [openingMarkId], references: [id], onDelete: SetNull)
+  status                CashSessionStatus @default(OPEN)
+  openedAt              DateTime          @default(now()) @map("opened_at")
+  openingFloat          Decimal           @map("opening_float") @db.Decimal(10, 2)
+  openingDenominations  Json              @map("opening_denominations")
+  openingNotes          String?           @map("opening_notes") @db.Text
+  closedAt              DateTime?         @map("closed_at")
+  countedCash           Decimal?          @map("counted_cash") @db.Decimal(10, 2)
+  expectedCash          Decimal?          @map("expected_cash") @db.Decimal(10, 2)
+  difference            Decimal?          @db.Decimal(10, 2)
+  closingDenominations  Json?             @map("closing_denominations")
+  notes                 String?           @db.Text
+  differenceObservation String?           @map("difference_observation") @db.Text
+  reportPdfPath         String?           @map("pdf_path")
+  annulledAt            DateTime?         @map("annulled_at")
+  annulledBy            String?           @map("annulled_by")
+  annulmentReason       String?           @map("annulment_reason") @db.Text
+  movements             CashMovement[]
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at")
 
   @@index([employeeId, openedAt])
   @@index([status, openedAt])
@@ -246,16 +278,20 @@ model CashSession {
 }
 
 model CashMovement {
-  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sessionId   String           @db.Uuid @map("session_id")
-  session     CashSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  type        CashMovementType
-  method      PaymentMethod
-  amount      Decimal          @db.Decimal(10, 2)
-  description String
-  occurredAt  DateTime         @default(now()) @map("occurred_at")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @default(now()) @map("updated_at")
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId      String           @map("session_id") @db.Uuid
+  session        CashSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type           CashMovementType
+  method         PaymentMethod
+  amount         Decimal          @db.Decimal(10, 2)
+  description    String
+  saleId         String?          @unique @map("sale_id") @db.Uuid
+  sale           Venta?           @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  referenceId    String?          @map("reference_id") @db.Uuid
+  referencedSale Venta?           @relation("CashRefundReference", fields: [referenceId], references: [id], onDelete: SetNull)
+  occurredAt     DateTime         @default(now()) @map("occurred_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at")
 
   @@index([sessionId, occurredAt])
   @@map("cash_movements")
@@ -263,7 +299,7 @@ model CashMovement {
 
 model AttendanceMark {
   id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employeeId  String       @db.Uuid @map("employee_id")
+  employeeId  String       @map("employee_id") @db.Uuid
   employee    Employee     @relation(fields: [employeeId], references: [id])
   cashSession CashSession?
   type        PunchType
@@ -272,7 +308,7 @@ model AttendanceMark {
   longitude   Decimal?     @db.Decimal(9, 6)
   note        String?      @db.VarChar(240)
   createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @default(now()) @map("updated_at")
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at")
 
   @@index([employeeId, markedAt])
   @@map("attendance_marks")
@@ -280,30 +316,30 @@ model AttendanceMark {
 
 model PayrollLine {
   id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employeeId         String   @db.Uuid @map("employee_id")
+  employeeId         String   @map("employee_id") @db.Uuid
   employee           Employee @relation(fields: [employeeId], references: [id])
   periodStart        DateTime @map("period_start")
   periodEnd          DateTime @map("period_end")
-  ordinaryDayHours   Decimal  @default(0) @db.Decimal(7, 2) @map("ordinary_day_hours")
-  ordinaryNightHours Decimal  @default(0) @db.Decimal(7, 2) @map("ordinary_night_hours")
-  extraDayHours      Decimal  @default(0) @db.Decimal(7, 2) @map("extra_day_hours")
-  extraNightHours    Decimal  @default(0) @db.Decimal(7, 2) @map("extra_night_hours")
-  holidayHours       Decimal  @default(0) @db.Decimal(7, 2) @map("holiday_hours")
+  ordinaryDayHours   Decimal  @default(0) @map("ordinary_day_hours") @db.Decimal(7, 2)
+  ordinaryNightHours Decimal  @default(0) @map("ordinary_night_hours") @db.Decimal(7, 2)
+  extraDayHours      Decimal  @default(0) @map("extra_day_hours") @db.Decimal(7, 2)
+  extraNightHours    Decimal  @default(0) @map("extra_night_hours") @db.Decimal(7, 2)
+  holidayHours       Decimal  @default(0) @map("holiday_hours") @db.Decimal(7, 2)
   compensatoryDayOff Boolean  @default(false) @map("compensatory_day_off")
   tardyMinutes       Int      @default(0) @map("tardy_minutes")
-  basePay            Decimal  @db.Decimal(10, 2) @map("base_pay")
-  overtimePay        Decimal  @default(0) @db.Decimal(10, 2) @map("overtime_pay")
+  basePay            Decimal  @map("base_pay") @db.Decimal(10, 2)
+  overtimePay        Decimal  @default(0) @map("overtime_pay") @db.Decimal(10, 2)
   bonuses            Decimal  @default(0) @db.Decimal(10, 2)
   adjustments        Decimal  @default(0) @db.Decimal(10, 2)
-  grossPay           Decimal  @db.Decimal(10, 2) @map("gross_pay")
-  isssDeduction      Decimal  @default(0) @db.Decimal(10, 2) @map("isss_deduction")
-  afpDeduction       Decimal  @default(0) @db.Decimal(10, 2) @map("afp_deduction")
-  incomeTaxDeduction Decimal  @default(0) @db.Decimal(10, 2) @map("income_tax_deduction")
-  netPay             Decimal  @db.Decimal(10, 2) @map("net_pay")
+  grossPay           Decimal  @map("gross_pay") @db.Decimal(10, 2)
+  isssDeduction      Decimal  @default(0) @map("isss_deduction") @db.Decimal(10, 2)
+  afpDeduction       Decimal  @default(0) @map("afp_deduction") @db.Decimal(10, 2)
+  incomeTaxDeduction Decimal  @default(0) @map("income_tax_deduction") @db.Decimal(10, 2)
+  netPay             Decimal  @map("net_pay") @db.Decimal(10, 2)
   legalDeductions    Boolean  @map("legal_deductions")
   status             String   @default("DRAFT")
   createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @default(now()) @map("updated_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@unique([employeeId, periodStart, periodEnd])
   @@index([periodStart, periodEnd])
@@ -313,13 +349,13 @@ model PayrollLine {
 model LaborSettings {
   id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   graceMinutes        Int      @default(10) @map("grace_minutes")
-  nightPremiumPercent Decimal  @default(25) @db.Decimal(5, 2) @map("night_premium_percent")
-  dailyDayLimit       Decimal  @default(8) @db.Decimal(4, 2) @map("daily_day_limit")
-  weeklyDayLimit      Decimal  @default(44) @db.Decimal(5, 2) @map("weekly_day_limit")
-  dailyNightLimit     Decimal  @default(7) @db.Decimal(4, 2) @map("daily_night_limit")
-  weeklyNightLimit    Decimal  @default(39) @db.Decimal(5, 2) @map("weekly_night_limit")
+  nightPremiumPercent Decimal  @default(25) @map("night_premium_percent") @db.Decimal(5, 2)
+  dailyDayLimit       Decimal  @default(8) @map("daily_day_limit") @db.Decimal(4, 2)
+  weeklyDayLimit      Decimal  @default(44) @map("weekly_day_limit") @db.Decimal(5, 2)
+  dailyNightLimit     Decimal  @default(7) @map("daily_night_limit") @db.Decimal(4, 2)
+  weeklyNightLimit    Decimal  @default(39) @map("weekly_night_limit") @db.Decimal(5, 2)
   createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @default(now()) @map("updated_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("labor_settings")
 }

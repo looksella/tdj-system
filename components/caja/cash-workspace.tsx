@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { ArrowDownLeft, ArrowRight, Banknote, CreditCard, Ellipsis, Plus, ReceiptText, WalletCards } from "lucide-react";
-import { addCashMovement, closeCash, deleteCashMovement, openCash, updateCashMovement } from "@/lib/actions/operations";
+import { ArrowDownLeft, ArrowRight, Banknote, CreditCard, Download, Ellipsis, Plus, ReceiptText, Share2, WalletCards } from "lucide-react";
+import { addCashMovement, annulCashSession, closeCash, deleteCashMovement, getCashReportLink, openCash, updateCashMovement } from "@/lib/actions/operations";
 import { formatDateTime, formatMoney } from "@/lib/locale";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 type EmployeeOption = { id: string; fullName: string };
-type Movement = { id: string; type: string; method: string; amount: number; description: string; occurredAt: string };
-type Session = { id: string; employeeId: string; employeeName: string; status: string; openedAt: string; closedAt: string | null; openingFloat: number; countedCash: number | null; expectedCash: number | null; difference: number | null; notes: string | null; movements: Movement[] };
-const methodLabels: Record<string, string> = { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER: "Transferencia", OTHER: "Otro" };
-const typeLabels: Record<string, string> = { SALE: "Cobro", EXPENSE: "Salida menor", ADJUSTMENT: "Ajuste" };
+type Movement = { id: string; saleId: string | null; type: string; method: string; amount: number; description: string; occurredAt: string };
+type Session = { id: string; employeeId: string; employeeName: string; status: string; openedAt: string; closedAt: string | null; openingFloat: number; countedCash: number | null; expectedCash: number | null; difference: number | null; notes: string | null; annulledAt: string | null; annulmentReason: string | null; movements: Movement[] };
+const methodLabels: Record<string, string> = { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER: "Transferencia", CREDIT: "Crédito", OTHER: "Otro" };
+const typeLabels: Record<string, string> = { SALE: "Venta", REFUND: "Devolución", INCOME: "Ingreso", EXPENSE: "Egreso", ADJUSTMENT: "Ajuste" };
 const denominationList = [100, 50, 20, 10, 5, 1, 0.25, 0.1, 0.05];
 function DenominationGrid({ prefix }: { prefix: string }) {
   return <div className="grid grid-cols-3 gap-2">{denominationList.map((value) => <div key={value}><Label className="mb-1 block text-[10px] font-semibold text-muted-foreground">${value.toFixed(value < 1 ? 2 : 0)}</Label><Input name={`${prefix}${String(value).replace(".", "_")}`} type="number" min="0" step="1" defaultValue="0" className="h-9 px-2 text-xs" /></div>)}</div>;
@@ -37,39 +37,203 @@ function useFormDialog(action: (form: FormData) => Promise<void>) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="space-y-1.5"><Label className="text-xs font-semibold">{label}</Label>{children}</div>;
 }
-export function CashWorkspace({ sessions, employees, canOperateSession }: { sessions: Session[]; employees: EmployeeOption[]; canOperateSession: boolean }) {
+export function CashWorkspace({ sessions, employees, canOperateSession, canManageReports = false }: { sessions: Session[]; employees: EmployeeOption[]; canOperateSession: boolean; canManageReports?: boolean }) {
   const current = sessions.find((session) => session.status === "OPEN");
   const opener = useFormDialog(async (form) => { await openCash(form); });
   const closer = useFormDialog(async (form) => { await closeCash(form); });
   const movement = useFormDialog(async (form) => { await addCashMovement(form); });
   const [historySearch, setHistorySearch] = useState("");
   const [method, setMethod] = useState("CASH");
-  const [type, setType] = useState("SALE");
+  const [type, setType] = useState("INCOME");
   const [editing, setEditing] = useState<Movement | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editError, setEditError] = useState("");
+  const [reportError, setReportError] = useState("");
+  const [busyReport, setBusyReport] = useState("");
   const sales = current?.movements.filter((item) => item.type === "SALE") ?? [];
+  const refunds = current?.movements.filter((item) => item.type === "REFUND") ?? [];
+  const income = current?.movements.filter((item) => item.type === "INCOME") ?? [];
   const expenses = current?.movements.filter((item) => item.type === "EXPENSE") ?? [];
   const collected = sales.reduce((sum, item) => sum + item.amount, 0);
   const cashCollected = sales.filter((item) => item.method === "CASH").reduce((sum, item) => sum + item.amount, 0);
   const cardCollected = sales.filter((item) => item.method === "CARD").reduce((sum, item) => sum + item.amount, 0);
   const transferCollected = sales.filter((item) => item.method === "TRANSFER").reduce((sum, item) => sum + item.amount, 0);
-  const closedSessions = sessions.filter((session) => session.status === "CLOSED" && `${session.employeeName} ${formatDateTime(session.openedAt)}`.toLowerCase().includes(historySearch.toLowerCase())).slice(0, 6);
+  const expectedCash = (current?.openingFloat ?? 0) + (current?.movements.reduce((sum, item) => {
+    if (item.method !== "CASH") return sum;
+    if (item.type === "SALE" || item.type === "INCOME") return sum + item.amount;
+    if (item.type === "EXPENSE" || item.type === "REFUND") return sum - item.amount;
+    return sum;
+  }, 0) ?? 0);
+  const closedSessions = sessions.filter((session) => session.status === "CLOSED" && `${session.employeeName} ${formatDateTime(session.openedAt)}`.toLowerCase().includes(historySearch.toLowerCase()));
+  const openReport = async (sessionId: string, sendToOwner = false) => {
+    const popup = window.open("about:blank", "_blank");
+    setBusyReport(sessionId);
+    setReportError("");
+    try {
+      const report = await getCashReportLink(sessionId);
+      if (sendToOwner) {
+        if (!report.ownerPhone) throw new Error("Configura OWNER_WHATSAPP_NUMBER para enviar el reporte al dueño.");
+        const url = `https://api.whatsapp.com/send?phone=${report.ownerPhone}&text=${encodeURIComponent(report.text)}`;
+        if (popup) popup.location.assign(url);
+        else window.location.assign(url);
+        return;
+      }
+      if (typeof navigator.share === "function" && typeof navigator.canShare === "function") {
+        const response = await fetch(`/api/caja/cierres/${encodeURIComponent(sessionId)}/pdf`);
+        if (response.ok) {
+          const file = new File([await response.blob()], report.filename, { type: "application/pdf" });
+          if (navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file], title: "Reporte Cierre", text: report.text });
+              popup?.close();
+              return;
+            } catch (cause) {
+              if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+            }
+          }
+        }
+      }
+      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(report.text)}`;
+      if (popup) popup.location.assign(url);
+      else window.location.assign(url);
+    } catch (cause) {
+      popup?.close();
+      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+        setReportError(cause instanceof Error ? cause.message : "No se pudo compartir el cierre.");
+      }
+    } finally {
+      setBusyReport("");
+    }
+  };
+  const annulSession = async (sessionId: string) => {
+    const reason = window.prompt("Motivo de anulación del cierre:");
+    if (!reason?.trim()) return;
+    try {
+      await annulCashSession(sessionId, reason);
+    } catch (cause) {
+      setReportError(cause instanceof Error ? cause.message : "No se pudo anular el cierre.");
+    }
+  };
+  const downloadReport = async (sessionId: string) => {
+    const popup = window.open("about:blank", "_blank");
+    setBusyReport(sessionId);
+    setReportError("");
+    try {
+      await getCashReportLink(sessionId);
+      const url = `/api/caja/cierres/${encodeURIComponent(sessionId)}/pdf`;
+      if (popup) popup.location.assign(url);
+      else window.location.assign(url);
+    } catch (cause) {
+      popup?.close();
+      setReportError(cause instanceof Error ? cause.message : "No se pudo descargar el PDF.");
+    } finally {
+      setBusyReport("");
+    }
+  };
   return <div className="space-y-7">
     <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow">Control de efectivo</p><h1 className="mt-2 font-display text-3xl font-bold">Apertura y cierre de caja</h1><p className="mt-2 text-sm text-muted-foreground">Cada turno, cobro y salida menor queda en su lugar.</p></div><div className="flex gap-2">{current ? canOperateSession ? <>
-      <Dialog open={movement.open} onOpenChange={movement.setOpen}><DialogTrigger asChild><Button className="rounded-xl"><Plus className="size-4" /> Registrar movimiento</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Nuevo movimiento</DialogTitle><DialogDescription>Registra un cobro o una salida menor en este turno.</DialogDescription></DialogHeader><form action={movement.submit} className="mt-2 space-y-4"><input type="hidden" name="sessionId" value={current.id} /><div className="grid grid-cols-2 gap-3"><Field label="Tipo"><Select value={type} onValueChange={setType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SALE">Cobro</SelectItem><SelectItem value="EXPENSE">Salida menor</SelectItem></SelectContent></Select><input type="hidden" name="type" value={type} /></Field><Field label="Medio"><Select value={method} onValueChange={setMethod}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Efectivo</SelectItem><SelectItem value="CARD">Tarjeta</SelectItem><SelectItem value="TRANSFER">Transferencia</SelectItem><SelectItem value="OTHER">Otro</SelectItem></SelectContent></Select><input type="hidden" name="method" value={method} /></Field></div><Field label="Concepto"><Input name="description" required placeholder="Venta mostrador, compra de bolsas…" /></Field><Field label="Importe"><Input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00" /></Field>{movement.error && <p className="text-xs text-destructive">{movement.error}</p>}<Button className="w-full rounded-xl">Guardar movimiento</Button></form></DialogContent></Dialog>
-      <Dialog open={closer.open} onOpenChange={closer.setOpen}><DialogTrigger asChild><Button variant="outline" className="rounded-xl bg-card">Cerrar turno <ArrowRight className="size-4" /></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Cierre a ciegas</DialogTitle><DialogDescription>Cuenta el efectivo físico antes de consultar el resultado del arqueo.</DialogDescription></DialogHeader><form action={closer.submit} className="mt-2 space-y-4"><input type="hidden" name="sessionId" value={current.id} /><Field label="Cuenta billetes y monedas"><DenominationGrid prefix="close_" /></Field><Field label="Notas del cierre"><Input name="notes" placeholder="Observaciones opcionales" /></Field>{closer.error && <p className="text-xs text-destructive">{closer.error}</p>}<Button className="w-full rounded-xl">Cerrar y generar arqueo</Button></form></DialogContent></Dialog>
-    </> : <Badge variant="outline" className="rounded-xl bg-card px-3 py-2 text-[11px]">Turno abierto por otra persona</Badge> : <Dialog open={opener.open} onOpenChange={opener.setOpen}><DialogTrigger asChild><Button className="rounded-xl"><Plus className="size-4" /> Abrir caja</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Abrir caja</DialogTitle><DialogDescription>Elige a quien inicia el turno y registra el fondo con el que comienza.</DialogDescription></DialogHeader><form action={opener.submit} className="mt-2 space-y-4"><Field label="Cajero"><select className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm" name="employeeId" required defaultValue=""><option value="" disabled>Selecciona una persona</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></Field><Field label="Fondo inicial · unidades por denominación"><DenominationGrid prefix="open_" /></Field><p className="-mt-2 text-[10px] text-muted-foreground">El fondo se calcula con las cantidades que ingreses arriba.</p>{opener.error && <p className="text-xs text-destructive">{opener.error}</p>}<Button className="w-full rounded-xl">Iniciar turno de caja</Button></form></DialogContent></Dialog>}</div></section>
+      <Dialog open={movement.open} onOpenChange={movement.setOpen}>
+        <DialogTrigger asChild><Button className="rounded-xl"><Plus className="size-4" /> Registrar movimiento</Button></DialogTrigger>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Nuevo movimiento</DialogTitle><DialogDescription>Las ventas se registran automáticamente. Aquí puedes anotar ingresos y egresos manuales.</DialogDescription></DialogHeader>
+          <form action={movement.submit} className="mt-2 space-y-4">
+            <input type="hidden" name="sessionId" value={current.id} />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Tipo"><Select value={type} onValueChange={setType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INCOME">Ingreso</SelectItem><SelectItem value="EXPENSE">Egreso</SelectItem></SelectContent></Select><input type="hidden" name="type" value={type} /></Field>
+              <Field label="Medio"><Select value={method} onValueChange={setMethod}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Efectivo</SelectItem><SelectItem value="CARD">Tarjeta</SelectItem><SelectItem value="TRANSFER">Transferencia</SelectItem><SelectItem value="CREDIT">Crédito</SelectItem><SelectItem value="OTHER">Otro</SelectItem></SelectContent></Select><input type="hidden" name="method" value={method} /></Field>
+            </div>
+            <Field label="Concepto"><Input name="description" required placeholder="Compra de bolsas, ingreso adicional…" /></Field>
+            <Field label="Importe"><Input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00" /></Field>
+            {movement.error && <p className="text-xs text-destructive">{movement.error}</p>}
+            <Button className="w-full rounded-xl">Guardar movimiento</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={closer.open} onOpenChange={closer.setOpen}><DialogTrigger asChild><Button variant="outline" className="rounded-xl bg-card">Cerrar turno <ArrowRight className="size-4" /></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Cierre de caja</DialogTitle><DialogDescription>Cuenta el efectivo físico. Si existe una diferencia, explica el motivo.</DialogDescription></DialogHeader><form action={closer.submit} className="mt-2 space-y-4"><input type="hidden" name="sessionId" value={current.id} /><Field label="Cuenta billetes y monedas"><DenominationGrid prefix="close_" /></Field><Field label="Observación de diferencia"><Input name="differenceObservation" placeholder="Obligatoria si el arqueo no cuadra" /></Field><Field label="Notas adicionales"><Input name="notes" placeholder="Observaciones opcionales" /></Field>{closer.error && <p className="text-xs text-destructive">{closer.error}</p>}<Button className="w-full rounded-xl">Cerrar y generar reporte</Button></form></DialogContent></Dialog>
+    </> : <Badge variant="outline" className="rounded-xl bg-card px-3 py-2 text-[11px]">Turno abierto por otra persona</Badge> : <Dialog open={opener.open} onOpenChange={opener.setOpen}><DialogTrigger asChild><Button className="rounded-xl"><Plus className="size-4" /> Abrir caja</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Abrir caja</DialogTitle><DialogDescription>Elige a quien inicia el turno y registra el fondo con el que comienza.</DialogDescription></DialogHeader><form action={opener.submit} className="mt-2 space-y-4"><Field label="Cajero"><select className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm" name="employeeId" required defaultValue=""><option value="" disabled>Selecciona una persona</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></Field><Field label="Fondo inicial · unidades por denominación"><DenominationGrid prefix="open_" /></Field><Field label="Observaciones de apertura"><Input name="openingNotes" placeholder="Opcional" /></Field><p className="-mt-2 text-[10px] text-muted-foreground">El fondo se calcula con las cantidades que ingreses arriba.</p>{opener.error && <p className="text-xs text-destructive">{opener.error}</p>}<Button className="w-full rounded-xl">Iniciar turno de caja</Button></form></DialogContent></Dialog>}</div></section>
+    {closer.error && <p role="alert" className="text-sm text-destructive">{closer.error}</p>}
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Card className="surface-card border-border/80"><CardContent className="p-5"><div className="flex items-center justify-between"><span className="eyebrow">Estado del turno</span><span className={`size-2.5 rounded-full ${current ? "bg-emerald-500" : "bg-muted-foreground/40"}`} /></div><p className="mt-4 font-display text-xl font-bold">{current ? "Caja abierta" : "Caja cerrada"}</p><p className="mt-1 text-xs text-muted-foreground">{current ? current.employeeName : "Listo para iniciar un turno"}</p></CardContent></Card>
       <Card className="surface-card border-border/80"><CardContent className="p-5"><span className="eyebrow">Cobros del turno</span><p className="mt-4 font-display text-[26px] font-bold">{current ? "Oculto" : formatMoney(collected)}</p><p className="mt-1 text-xs text-muted-foreground">{current ? "Se revela después del arqueo" : `${sales.length} movimientos de venta`}</p></CardContent></Card>
       <Card className="surface-card border-border/80"><CardContent className="p-5"><span className="eyebrow">Efectivo recibido</span><p className="mt-4 font-display text-[26px] font-bold">{current ? "Oculto" : formatMoney(cashCollected)}</p><p className="mt-1 text-xs text-muted-foreground">Conteo final oculto hasta el cierre</p></CardContent></Card>
-      <Card className="surface-card border-border/80"><CardContent className="p-5"><span className="eyebrow">Salidas menores</span><p className="mt-4 font-display text-[26px] font-bold">{formatMoney(expenses.reduce((sum, item) => sum + item.amount, 0))}</p><p className="mt-1 text-xs text-muted-foreground">{expenses.length} gastos registrados</p></CardContent></Card>
+      <Card className="surface-card border-border/80"><CardContent className="p-5"><span className="eyebrow">Egresos del turno</span><p className="mt-4 font-display text-[26px] font-bold">{formatMoney(expenses.reduce((sum, item) => sum + item.amount, 0))}</p><p className="mt-1 text-xs text-muted-foreground">{income.length} ingresos · {expenses.length} egresos · {refunds.length} devoluciones</p></CardContent></Card>
     </section>
+    {current && <Card className="surface-card border-border/80"><CardContent className="flex items-center justify-between p-5"><div><p className="eyebrow">Efectivo esperado en caja</p><p className="mt-1 text-xs text-muted-foreground">Fondo + ventas e ingresos en efectivo − egresos y devoluciones</p></div><p className="font-display text-2xl font-bold">{formatMoney(expectedCash)}</p></CardContent></Card>}
     {current ? <section className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-      <Card className="surface-card overflow-hidden border-border/80"><CardContent className="p-0"><div className="flex items-center justify-between border-b border-border/70 px-5 py-5 sm:px-6"><div><p className="eyebrow">Turno activo · {current.employeeName}</p><h2 className="mt-1 font-display text-lg font-bold">Movimientos de caja</h2></div><Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Abierta · {formatDateTime(current.openedAt).split(",").at(-1)?.trim()}</Badge></div><div className="divide-y divide-border/70">{current.movements.map((item) => <div key={item.id} className="flex items-center gap-3 px-5 py-3.5 sm:px-6"><span className={`grid size-9 shrink-0 place-items-center rounded-xl ${item.type === "SALE" ? "bg-primary/10 text-primary" : "bg-[#f8ead9] text-[#a36c32]"}`}>{item.method === "CASH" ? <Banknote className="size-4" /> : item.method === "CARD" ? <CreditCard className="size-4" /> : <ReceiptText className="size-4" />}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{item.description}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{typeLabels[item.type]} · {methodLabels[item.method]} · {formatDateTime(item.occurredAt)}</p></div><span className={`text-sm font-bold tabular-nums ${item.type === "EXPENSE" ? "text-amber-700" : "text-foreground"}`}>{current && item.method === "CASH" ? "Oculto" : `${item.type === "EXPENSE" ? "−" : "+"}${formatMoney(item.amount)}`}</span>{canOperateSession && <Dialog open={editOpen && editing?.id === item.id} onOpenChange={(open) => { setEditOpen(open); if (open) setEditing(item); }}><DialogTrigger asChild><Button variant="ghost" size="icon" title="Editar movimiento" className="size-8"><Ellipsis className="size-4" /></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Editar movimiento</DialogTitle><DialogDescription>Corrige el concepto, importe o medio de pago.</DialogDescription></DialogHeader>{editing && <form action={async (form) => { try { setEditOpen(false); await updateCashMovement(form); setEditError(""); } catch (cause) { setEditError(cause instanceof Error ? cause.message : "No se pudo guardar."); } }} className="space-y-4"><input type="hidden" name="id" value={editing.id} /><input type="hidden" name="sessionId" value={current.id} /><Field label="Concepto"><Input name="description" defaultValue={editing.description} required /></Field><Field label="Importe"><Input name="amount" type="number" min="0.01" step="0.01" defaultValue={editing.amount} required /></Field><Field label="Tipo"><select name="type" defaultValue={editing.type} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"><option value="SALE">Cobro</option><option value="EXPENSE">Salida menor</option></select></Field><Field label="Medio"><select name="method" defaultValue={editing.method} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option><option value="OTHER">Otro</option></select></Field>{editError && <p className="text-xs text-destructive">{editError}</p>}<div className="flex gap-2"><Button className="flex-1">Guardar cambios</Button><Button formAction={deleteCashMovement} formNoValidate variant="destructive" name="id" value={editing.id} className="rounded-xl">Eliminar</Button><input type="hidden" name="sessionId" value={current.id} /></div></form>}</DialogContent></Dialog>}</div>)}{current.movements.length === 0 && <div className="px-5 py-12 text-center text-sm text-muted-foreground">Aún no hay movimientos; registra el primer cobro del turno.</div>}</div></CardContent></Card>
-      <div className="space-y-5"><Card className="surface-card overflow-hidden border-border/80"><CardContent className="p-5"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-2xl bg-[#edf1d9] text-[#748032]"><WalletCards className="size-5" /></span><div><p className="eyebrow">Resumen de cobros</p><p className="font-display text-xl font-bold">{current ? "Oculto" : formatMoney(collected)}</p></div></div><div className="mt-5 space-y-3">{[["Efectivo", current ? null : cashCollected], ["Tarjetas", cardCollected], ["Transferencias", transferCollected]].map(([label, value]) => <div key={String(label)} className="flex justify-between text-xs"><span className="text-muted-foreground">{label}</span><span className="font-semibold">{value === null ? "Oculto" : formatMoney(Number(value))}</span></div>)}</div></CardContent></Card><div className="rounded-2xl border border-amber-200 bg-amber-50/75 p-5"><div className="flex gap-3"><span className="grid size-8 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800"><ArrowDownLeft className="size-4" /></span><div><p className="text-xs font-bold text-amber-950">El arqueo se calcula al cerrar</p><p className="mt-1 text-[11px] leading-relaxed text-amber-900/75">El conteo esperado no se muestra durante el turno. Al cerrar, se compara el efectivo contado con el fondo y las entradas/salidas registradas.</p></div></div></div></div>
+      <Card className="surface-card overflow-hidden border-border/80">
+        <CardContent className="p-0">
+          <div className="flex items-center justify-between border-b border-border/70 px-5 py-5 sm:px-6">
+            <div><p className="eyebrow">Turno activo · {current.employeeName}</p><h2 className="mt-1 font-display text-lg font-bold">Movimientos de caja</h2></div>
+            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Abierta · {formatDateTime(current.openedAt).split(",").at(-1)?.trim()}</Badge>
+          </div>
+          <div className="divide-y divide-border/70">
+            {current.movements.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 px-5 py-3.5 sm:px-6">
+                <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${item.type === "SALE" || item.type === "INCOME" ? "bg-primary/10 text-primary" : "bg-[#f8ead9] text-[#a36c32]"}`}>
+                  {item.method === "CASH" ? <Banknote className="size-4" /> : item.method === "CARD" ? <CreditCard className="size-4" /> : <ReceiptText className="size-4" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold">{item.description}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{typeLabels[item.type]} · {methodLabels[item.method]} · {formatDateTime(item.occurredAt)}</p>
+                </div>
+                <span className={`text-sm font-bold tabular-nums ${item.type === "EXPENSE" || item.type === "REFUND" ? "text-amber-700" : "text-foreground"}`}>
+                  {`${item.type === "EXPENSE" || item.type === "REFUND" ? "−" : "+"}${formatMoney(item.amount)}`}
+                </span>
+                {canOperateSession && !item.saleId && (item.type === "INCOME" || item.type === "EXPENSE") && (
+                  <Dialog open={editOpen && editing?.id === item.id} onOpenChange={(open) => { setEditOpen(open); if (open) setEditing(item); }}>
+                    <DialogTrigger asChild><Button variant="ghost" size="icon" title="Editar movimiento" className="size-8"><Ellipsis className="size-4" /></Button></DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader><DialogTitle>Editar movimiento</DialogTitle><DialogDescription>Corrige el concepto, importe o medio de pago.</DialogDescription></DialogHeader>
+                      {editing && <form action={async (form) => { try { setEditOpen(false); await updateCashMovement(form); setEditError(""); } catch (cause) { setEditError(cause instanceof Error ? cause.message : "No se pudo guardar."); } }} className="space-y-4">
+                        <input type="hidden" name="id" value={editing.id} /><input type="hidden" name="sessionId" value={current.id} />
+                        <Field label="Concepto"><Input name="description" defaultValue={editing.description} required /></Field>
+                        <Field label="Importe"><Input name="amount" type="number" min="0.01" step="0.01" defaultValue={editing.amount} required /></Field>
+                        <Field label="Tipo"><select name="type" defaultValue={editing.type} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"><option value="INCOME">Ingreso</option><option value="EXPENSE">Egreso</option></select></Field>
+                        <Field label="Medio"><select name="method" defaultValue={editing.method} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option><option value="CREDIT">Crédito</option><option value="OTHER">Otro</option></select></Field>
+                        {editError && <p className="text-xs text-destructive">{editError}</p>}
+                        <div className="flex gap-2"><Button className="flex-1">Guardar cambios</Button><Button formAction={deleteCashMovement} formNoValidate variant="destructive" name="id" value={editing.id} className="rounded-xl">Eliminar</Button></div>
+                      </form>}
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+            ))}
+            {current.movements.length === 0 && <div className="px-5 py-12 text-center text-sm text-muted-foreground">Sin movimientos en la jornada. El cuadre parte del fondo inicial.</div>}
+          </div>
+        </CardContent>
+      </Card>
+      <div className="space-y-5"><Card className="surface-card overflow-hidden border-border/80"><CardContent className="p-5"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-2xl bg-[#edf1d9] text-[#748032]"><WalletCards className="size-5" /></span><div><p className="eyebrow">Resumen de cobros</p><p className="font-display text-xl font-bold">{current ? "Oculto" : formatMoney(collected)}</p></div></div><div className="mt-5 space-y-3">{[["Efectivo", current ? null : cashCollected], ["Tarjetas", cardCollected], ["Transferencias", transferCollected]].map(([label, value]) => <div key={String(label)} className="flex justify-between text-xs"><span className="text-muted-foreground">{label}</span><span className="font-semibold">{value === null ? "Oculto" : formatMoney(Number(value))}</span></div>)}</div></CardContent></Card><div className="rounded-2xl border border-amber-200 bg-amber-50/75 p-5"><div className="flex gap-3"><span className="grid size-8 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800"><ArrowDownLeft className="size-4" /></span><div><p className="text-xs font-bold text-amber-950">Cuadre final al cerrar</p><p className="mt-1 text-[11px] leading-relaxed text-amber-900/75">El efectivo esperado se actualiza con el fondo y los movimientos. Al cerrar, se compara con el conteo físico para registrar cualquier diferencia.</p></div></div></div></div>
     </section> : <section className="rounded-2xl border border-dashed border-border bg-card/70 px-6 py-14 text-center"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary"><WalletCards className="size-5" /></span><h2 className="mt-4 font-display text-lg font-bold">Tu siguiente turno comienza aquí</h2><p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Abre la caja, asocia a la persona responsable y registra el fondo inicial por denominación.</p><Button onClick={() => opener.setOpen(true)} className="mt-5 rounded-xl">Abrir caja <ArrowRight className="size-4" /></Button></section>}
-    <section><div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="eyebrow">Historial</p><h2 className="mt-1 font-display text-lg font-bold">Cierres recientes</h2></div><Input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Buscar por cajero o fecha" className="h-9 max-w-xs bg-card text-xs" /></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{closedSessions.map((session) => <Card key={session.id} className="surface-card border-border/80"><CardContent className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs font-bold">{session.employeeName}</p><p className="mt-1 text-[10px] text-muted-foreground">{formatDateTime(session.openedAt)}</p></div><Badge variant="secondary" className="text-[9px]">Cerrada</Badge></div><div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/70 pt-3"><div><p className="eyebrow">Esperado</p><p className="mt-1 text-sm font-bold">{formatMoney(session.expectedCash ?? 0)}</p></div><div><p className="eyebrow">Diferencia</p><p className={`mt-1 text-sm font-bold ${(session.difference ?? 0) < 0 ? "text-rose-700" : "text-emerald-700"}`}>{formatMoney(session.difference ?? 0)}</p></div></div></CardContent></Card>)}{closedSessions.length === 0 && <div className="col-span-full rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Los cierres quedan guardados aquí para consultarlos después.</div>}</div></section>
+    <section>
+      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div><p className="eyebrow">Historial</p><h2 className="mt-1 font-display text-lg font-bold">Cierres recientes</h2></div>
+        <Input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Buscar por cajero o fecha" className="h-9 max-w-xs bg-card text-xs" />
+      </div>
+      {reportError && <p role="alert" className="mb-3 text-sm text-destructive">{reportError}</p>}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {closedSessions.map((session) => (
+          <Card key={session.id} className="surface-card border-border/80">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div><p className="text-xs font-bold">{session.employeeName}</p><p className="mt-1 text-[10px] text-muted-foreground">{formatDateTime(session.openedAt)}</p></div>
+                <Badge variant={session.annulledAt ? "destructive" : "secondary"} className="text-[9px]">{session.annulledAt ? "Anulada" : "Cerrada"}</Badge>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/70 pt-3">
+                <div><p className="eyebrow">Esperado</p><p className="mt-1 text-sm font-bold">{formatMoney(session.expectedCash ?? 0)}</p></div>
+                <div><p className="eyebrow">Diferencia</p><p className={`mt-1 text-sm font-bold ${(session.difference ?? 0) < 0 ? "text-rose-700" : "text-emerald-700"}`}>{formatMoney(session.difference ?? 0)}</p></div>
+              </div>
+              {session.annulmentReason && <p className="mt-3 text-xs text-muted-foreground">Motivo de anulación: {session.annulmentReason}</p>}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" disabled={busyReport === session.id} onClick={() => downloadReport(session.id)}><Download className="size-3.5" /> Descargar PDF</Button>
+                <Button size="sm" variant="outline" disabled={busyReport === session.id} onClick={() => openReport(session.id)}><Share2 className="size-3.5" /> Compartir por WhatsApp</Button>
+                <Button size="sm" variant="outline" disabled={busyReport === session.id} onClick={() => openReport(session.id, true)}>Enviar a dueño</Button>
+                {canManageReports && !session.annulledAt && <Button size="sm" variant="ghost" onClick={() => annulSession(session.id)}>Anular</Button>}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {closedSessions.length === 0 && <div className="col-span-full rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Los cierres quedan guardados aquí para consultarlos después.</div>}
+      </div>
+    </section>
   </div>;
 }

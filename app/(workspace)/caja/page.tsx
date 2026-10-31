@@ -7,7 +7,7 @@ import { empleadoVinculado } from "@/lib/turno";
 export const dynamic = "force-dynamic";
 
 /**
- * Caja del turno: apertura por denominación, movimientos y arqueo ciego.
+ * Caja del turno: apertura, movimientos, cierre, arqueo y reporte PDF.
  *
  * Accesible con `cash:operate` (empleado y administrador). Un empleado opera
  * solo su propio turno: la nómina de cajas cerradas y el botón de cerrar la
@@ -24,7 +24,7 @@ export default async function CajaPage() {
     db.cashSession.findMany({
       include: { employee: true, movements: { orderBy: { occurredAt: "desc" } } },
       orderBy: { openedAt: "desc" },
-      take: 12,
+      take: 100,
     }),
     db.employee.findMany({
       where: { active: true },
@@ -45,8 +45,11 @@ export default async function CajaPage() {
     expectedCash: session.expectedCash === null ? null : Number(session.expectedCash),
     difference: session.difference === null ? null : Number(session.difference),
     notes: session.notes,
+    annulledAt: session.annulledAt?.toISOString() ?? null,
+    annulmentReason: session.annulmentReason,
     movements: session.movements.map((move) => ({
       id: move.id,
+      saleId: move.saleId,
       type: move.type,
       method: move.method,
       amount: Number(move.amount),
@@ -69,6 +72,7 @@ export default async function CajaPage() {
       sessions={visibles}
       employees={esEmpleado && propio ? [{ id: propio.id, fullName: propio.fullName }] : employeesRaw}
       canOperateSession={canOperateSession}
+      canManageReports={user.role === "admin"}
     />
   );
 }

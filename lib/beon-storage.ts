@@ -87,6 +87,7 @@ export async function guardarDesdeServer(
   path: string,
   bytes: ArrayBuffer | Uint8Array | Blob,
   contentType = "application/octet-stream",
+  overwrite = false,
 ): Promise<{ path: string }> {
   const { url, bucket, serviceKey } = requerirStorage();
   const body = bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: contentType });
@@ -97,7 +98,7 @@ export async function guardarDesdeServer(
       Authorization: `Bearer ${serviceKey}`,
       apikey: serviceKey,
       "Content-Type": contentType,
-      "x-upsert": "false",
+      "x-upsert": overwrite ? "true" : "false",
     },
     cache: "no-store",
   });

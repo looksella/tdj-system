@@ -56,7 +56,7 @@ Abre `http://localhost:3000/sign-in` e inicia sesión con la cuenta correspondie
 | Herramienta | Empleado | Administrador |
 | --- | --- | --- |
 | Inventario, punto de venta | ✅ | ✅ |
-| Caja del turno (apertura, movimientos, arqueo ciego) | ✅ solo su turno | ✅ todos los turnos |
+| Caja del turno (apertura, movimientos, arqueo, PDF y compartir) | ✅ solo su turno | ✅ todos los turnos |
 | Asistencia (marcaje por PIN) | ✅ solo su ficha | ✅ cualquier ficha |
 | Corregir marcajes y tolerancia | — | ✅ |
 | Planilla, salarios, deducciones y recibos | — | ✅ |
@@ -67,6 +67,8 @@ El empleado queda ligado a su ficha por el **correo de su cuenta**: se escribe a
 El reparto vive en `lib/auth-helpers.ts` (`PERMISSIONS` y `PERMISOS_TURNO`) y se aplica en tres capas: el menú, la guarda de la página y cada Server Action en `lib/actions/operations.ts`.
 
 Las funciones opcionales de asistente, lectura de archivos, correo y calendario requieren configurar `BEON_TOOLS_URL` y `BEON_TOOLS_API_KEY` para un servicio compatible. La app de ventas e inventario no requiere esas variables. Para almacenamiento de imágenes, configura además `NEXT_PUBLIC_SUPABASE_BUCKET` y crea ese bucket en Supabase Storage.
+
+Los reportes de cierre se generan en el servidor y se guardan en ese bucket privado. Para compartirlos configura `NEXT_PUBLIC_SUPABASE_BUCKET` y `SUPABASE_SERVICE_ROLE_KEY`; los enlaces de descarga compartidos vencen en 24 horas. `OWNER_WHATSAPP_NUMBER` (formato internacional, solo dígitos) habilita el acceso directo a WhatsApp del dueño, y `BUSINESS_NAME` / `BUSINESS_BRANCH` personalizan el encabezado PDF. Las ventas del POS requieren una caja abierta y quedan asociadas a su turno en la misma transacción.
 
 ## Nota sobre la base de datos
 

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { guardAccion } from "@/lib/guard-autorizacion";
+import { cashMethodFromSale, lockCashOperations } from "@/lib/caja";
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -99,7 +100,7 @@ export type CheckoutLine = { productId: string; quantity: number };
 export async function createSale(lines: CheckoutLine[], paymentMethod: string, cashReceivedCents?: number, expectedTotalCents?: number) {
   const denial = await guardAccion("sales:create");
   if (denial) return { ok: false, message: denial };
-  const allowedMethods = ["Efectivo", "Tarjeta", "Transferencia", "Otro"];
+  const allowedMethods = ["Efectivo", "Tarjeta", "Transferencia", "Crédito", "Otro"];
   if (!Array.isArray(lines) || !lines.length || !allowedMethods.includes(paymentMethod)) return { ok: false, message: "Agrega productos y elige una forma de pago." };
   if (paymentMethod === "Efectivo" && (
     typeof cashReceivedCents !== "number" || !Number.isSafeInteger(cashReceivedCents) || cashReceivedCents < 0 ||
@@ -112,6 +113,12 @@ export async function createSale(lines: CheckoutLine[], paymentMethod: string, c
   }
   try {
     const sale = await db.$transaction(async (tx) => {
+      await lockCashOperations(tx);
+      const session = await tx.cashSession.findFirst({
+        where: { status: "OPEN" },
+        select: { id: true },
+      });
+      if (!session) throw new Error("Debes abrir caja antes de realizar operaciones.");
       const products = await tx.producto.findMany({ where: { id: { in: [...quantities.keys()] }, isActive: true } });
       if (products.length !== quantities.size) throw new Error("Uno de los productos ya no está disponible.");
       let totalCents = 0;
@@ -126,6 +133,16 @@ export async function createSale(lines: CheckoutLine[], paymentMethod: string, c
       if (paymentMethod === "Efectivo" && expectedTotalCents !== totalCents) throw new Error("El precio de un producto cambió. Actualiza la pantalla antes de cobrar.");
       if (paymentMethod === "Efectivo" && cashReceivedCents! < totalCents) throw new Error("El efectivo recibido no alcanza para cobrar esta venta.");
       const createdSale = await tx.venta.create({ data: { total: (totalCents / 100).toFixed(2), paymentMethod, source: "mostrador" } });
+      await tx.cashMovement.create({
+        data: {
+          sessionId: session.id,
+          saleId: createdSale.id,
+          type: "SALE",
+          method: cashMethodFromSale(paymentMethod),
+          amount: (totalCents / 100).toFixed(2),
+          description: `Venta #${createdSale.number}`,
+        },
+      });
       for (const item of lineData) {
         const changed = await tx.producto.updateMany({ where: { id: item.product.id, currentStock: { gte: item.quantity } }, data: { currentStock: { decrement: item.quantity } } });
         if (changed.count !== 1) throw new Error(`El inventario de ${item.product.name} cambió; intenta cobrar de nuevo.`);
@@ -136,6 +153,7 @@ export async function createSale(lines: CheckoutLine[], paymentMethod: string, c
     });
     revalidatePath("/ventas");
     revalidatePath("/inventario");
+    revalidatePath("/caja");
     revalidatePath("/");
     return { ok: true, message: "Venta registrada.", saleNumber: sale.number, soldAt: sale.soldAt.toISOString(), totalCents: Math.round(sale.total.toNumber() * 100) };
   } catch (error) {
@@ -147,8 +165,21 @@ export async function cancelSale(id: string) {
   if (denial) return { ok: false, message: denial };
   try {
     await db.$transaction(async (tx) => {
+      await lockCashOperations(tx);
       const sale = await tx.venta.findUnique({ where: { id }, include: { lines: true } });
       if (!sale || sale.status !== "completada") throw new Error("Esta venta ya fue anulada o no existe.");
+      const session = await tx.cashSession.findFirst({ where: { status: "OPEN" }, select: { id: true } });
+      if (!session) throw new Error("Debes abrir caja antes de registrar una devolución.");
+      await tx.cashMovement.create({
+        data: {
+          sessionId: session.id,
+          type: "REFUND",
+          method: cashMethodFromSale(sale.paymentMethod),
+          amount: sale.total,
+          referenceId: sale.id,
+          description: `Devolución de venta #${sale.number}`,
+        },
+      });
       await tx.venta.update({ where: { id }, data: { status: "anulada" } });
       for (const line of sale.lines) {
         await tx.producto.update({ where: { id: line.productId }, data: { currentStock: { increment: line.quantity } } });
@@ -157,6 +188,7 @@ export async function cancelSale(id: string) {
     });
     revalidatePath("/ventas");
     revalidatePath("/inventario");
+    revalidatePath("/caja");
     revalidatePath("/");
     return { ok: true, message: "Venta anulada e inventario restituido." };
   } catch (error) {
@@ -166,16 +198,29 @@ export async function cancelSale(id: string) {
 export async function changeSalePayment(id: string, paymentMethod: string) {
   const denial = await guardAccion("sales:manage");
   if (denial) return { ok: false, message: denial };
-  if (!["Efectivo", "Tarjeta", "Transferencia", "Otro"].includes(paymentMethod)) return { ok: false, message: "Elige una forma de pago válida." };
+  if (!["Efectivo", "Tarjeta", "Transferencia", "Crédito", "Otro"].includes(paymentMethod)) return { ok: false, message: "Elige una forma de pago válida." };
   try {
-    const sale = await db.venta.findUnique({ where: { id }, select: { status: true } });
-    if (!sale || sale.status !== "completada") return { ok: false, message: "Solo puedes editar una venta completada." };
-    await db.venta.update({ where: { id }, data: { paymentMethod } });
+    await db.$transaction(async (tx) => {
+      await lockCashOperations(tx);
+      const sale = await tx.venta.findUnique({ where: { id }, include: { cashMovement: { include: { session: true } } } });
+      if (!sale || sale.status !== "completada") throw new Error("Solo puedes editar una venta completada.");
+      if (sale.cashMovement?.session.status !== undefined && sale.cashMovement.session.status !== "OPEN") {
+        throw new Error("No se puede cambiar el pago de una venta incluida en un cierre ya realizado.");
+      }
+      await tx.venta.update({ where: { id }, data: { paymentMethod } });
+      if (sale.cashMovement) {
+        await tx.cashMovement.update({
+          where: { id: sale.cashMovement.id },
+          data: { method: cashMethodFromSale(paymentMethod) },
+        });
+      }
+    });
     revalidatePath("/ventas");
+    revalidatePath("/caja");
     revalidatePath("/");
     return { ok: true, message: "Forma de pago actualizada." };
-  } catch {
-    return { ok: false, message: "No se pudo actualizar la forma de pago." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "No se pudo actualizar la forma de pago." };
   }
 }
 export type PurchaseInput = {
