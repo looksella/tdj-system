@@ -1,14 +1,14 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { guardAccion } from "@/lib/guard-autorizacion";
 import { cashMethodFromSale, lockCashOperations } from "@/lib/caja";
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
-function productInput(formData: FormData) {
-  const sku = text(formData.get("sku"));
+function productInput(formData: FormData, generatedSku?: string) {
+  const sku = generatedSku ?? text(formData.get("sku"));
   const name = text(formData.get("name"));
   const salePrice = Number(text(formData.get("salePrice")));
   const purchasePrice = Number(text(formData.get("purchasePrice")) || 0);
@@ -27,14 +27,82 @@ function productInput(formData: FormData) {
     isActive: formData.get("isActive") === "on",
   };
 }
+
+function categorySkuPrefix(categoryName: string | null) {
+  const firstWord = categoryName
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .match(/[A-Z0-9]+/)?.[0];
+  return firstWord?.slice(0, 3) || "GEN";
+}
+
+async function nextProductSku(tx: Prisma.TransactionClient, categoryId: string) {
+  const category = categoryId
+    ? await tx.categoria.findUnique({ where: { id: categoryId }, select: { categoryName: true } })
+    : null;
+  if (categoryId && !category) throw new Error("La categoría seleccionada no existe.");
+
+  const prefix = categorySkuPrefix(category?.categoryName ?? null);
+  const existingSkus = await tx.producto.findMany({
+    where: { sku: { startsWith: `${prefix}-` } },
+    select: { sku: true },
+  });
+  const usedNumbers = new Set(
+    existingSkus
+      .map(({ sku }) => new RegExp(`^${prefix}-(\\d+)$`).exec(sku)?.[1])
+      .filter((number): number is string => Boolean(number))
+      .map(Number),
+  );
+  let nextNumber = 1;
+  while (usedNumbers.has(nextNumber)) nextNumber += 1;
+  return `${prefix}-${String(nextNumber).padStart(3, "0")}`;
+}
+
+export async function suggestProductSku(categoryId: string) {
+  const denial = await guardAccion("inventory:manage");
+  if (denial) return { ok: false as const, message: denial };
+  try {
+    const sku = await db.$transaction((tx) => nextProductSku(tx, categoryId.trim()));
+    return { ok: true as const, sku };
+  } catch (error) {
+    return { ok: false as const, message: error instanceof Error ? error.message : "No se pudo generar el código." };
+  }
+}
+
 export async function createProduct(formData: FormData) {
   const denial = await guardAccion("inventory:manage");
   if (denial) return { ok: false, message: denial };
   try {
-    await db.producto.create({ data: productInput(formData) });
+    const initialStock = Number(text(formData.get("initialStock")) || 0);
+    if (!Number.isInteger(initialStock) || initialStock < 0) {
+      throw new Error("La cantidad inicial debe ser un número entero de cero o más.");
+    }
+    const categoryId = text(formData.get("categoryId"));
+    let sku = "";
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        sku = await db.$transaction(async (tx) => {
+          const generatedSku = await nextProductSku(tx, categoryId);
+          const product = await tx.producto.create({
+            data: { ...productInput(formData, generatedSku), currentStock: initialStock },
+          });
+          if (initialStock > 0) {
+            await tx.movimientoStock.create({
+              data: { productId: product.id, delta: initialStock, reason: "ajuste", note: "Inventario inicial" },
+            });
+          }
+          return generatedSku;
+        });
+        break;
+      } catch (error) {
+        const isSkuCollision = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+        if (!isSkuCollision || attempt === 4) throw error;
+      }
+    }
     revalidatePath("/inventario");
     revalidatePath("/");
-    return { ok: true, message: "Producto agregado al inventario." };
+    return { ok: true, message: `Producto agregado al inventario con el código ${sku}.` };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "No se pudo guardar el producto." };
   }
