@@ -58,9 +58,7 @@ export function esContrasenaFiltrada(motivos: readonly string[] | undefined): bo
   return !!motivos && motivos.length > 0 && motivos.every((m) => m === "pwned");
 }
 function textoDeContrasenaRechazada(motivos: readonly string[] | undefined): string {
-  return esContrasenaFiltrada(motivos)
-    ? at.errores.passwordFiltrada
-    : at.errores.passwordDebil;
+  return esContrasenaFiltrada(motivos) ? at.errores.passwordFiltrada : at.errores.passwordDebil;
 }
 /**
  * Mensaje accionable, según el contexto. El ORDEN de los casos importa: el
@@ -80,9 +78,7 @@ export function mapSupabaseAuthError(
     return textoDeContrasenaRechazada(motivos);
   }
   if (isSupabaseRateLimit(s)) {
-    return contexto === "registro"
-      ? at.errores.rateLimitRegistro
-      : at.errores.rateLimit;
+    return contexto === "registro" ? at.errores.rateLimitRegistro : at.errores.rateLimit;
   }
   if (s.includes("already registered") || s.includes("already been registered")) {
     return at.errores.yaRegistrado;

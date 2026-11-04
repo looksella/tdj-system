@@ -19,8 +19,14 @@ function parse(raw) {
 
 async function resolve(host) {
   const [v4, v6] = await Promise.all([
-    lookup(host, { family: 4 }).then((r) => r.address, () => null),
-    lookup(host, { family: 6 }).then((r) => r.address, () => null),
+    lookup(host, { family: 4 }).then(
+      (r) => r.address,
+      () => null,
+    ),
+    lookup(host, { family: 6 }).then(
+      (r) => r.address,
+      () => null,
+    ),
   ]);
   return { v4, v6 };
 }
@@ -61,7 +67,24 @@ async function main() {
   const direct = process.env.DIRECT_DATABASE_URL;
 
   const runtime = await describe("DATABASE_URL (la usa la aplicación en ejecución)", url);
-  await describe("DIRECT_DATABASE_URL (solo la usa el CLI de Prisma)", direct);
+  const migration = await describe("DIRECT_DATABASE_URL (solo la usa el CLI de Prisma)", direct);
+  const migrationReady =
+    migration?.host.endsWith(".pooler.supabase.com") && migration.port === "5432";
+  const runtimeNeedsPgBouncer =
+    runtime?.host.endsWith(".pooler.supabase.com") && runtime.port === "6543" && !runtime.pooled;
+
+  if (migration && !migrationReady) {
+    console.log(
+      "DIRECT_DATABASE_URL debe usar la URI Session pooler de Supabase (puerto 5432). La URI Transaction pooler (6543) es solo para DATABASE_URL.",
+    );
+    process.exitCode = 1;
+  }
+  if (runtimeNeedsPgBouncer) {
+    console.log(
+      "DATABASE_URL usa Transaction pooler (6543) pero no incluye pgbouncer=true. Añádelo a esa URI en .env y en los entornos desplegados.",
+    );
+    process.exitCode = 1;
+  }
 
   if (!runtime) {
     console.log("Configura DATABASE_URL en .env antes de probar la conexión.");

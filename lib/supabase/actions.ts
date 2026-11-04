@@ -16,6 +16,7 @@ export async function signOut() {
   // There is no session to sign out from when Supabase Auth is not configured.
   if (!LOGIN_ACTIVO) redirect("/");
   const supabase = await createServerClient();
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) throw new Error(`No se pudo cerrar la sesión: ${error.message}`);
   redirect("/sign-in");
 }

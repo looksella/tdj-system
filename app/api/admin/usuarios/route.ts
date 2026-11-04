@@ -3,10 +3,7 @@ import { INVITABLE_ROLES, isAllowed } from "@/lib/auth-helpers";
 import { at } from "@/lib/auth-textos";
 import { LOGIN_ACTIVO } from "@/lib/supabase/estado";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
-import {
-  isSupabaseRateLimit,
-  mapSupabaseInviteError,
-} from "@/lib/supabase/invite-errors";
+import { isSupabaseRateLimit, mapSupabaseInviteError } from "@/lib/supabase/invite-errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /**
@@ -170,8 +167,7 @@ export async function POST(request: Request) {
   // `isAllowed`), así que no puede entrar crudo desde el body: se valida
   // contra los roles que este sistema declara. Fail closed: un rol
   // desconocido es 400, nunca un usuario con un rol inventado en la base.
-  const rolPedido =
-    typeof role === "string" && role.trim() ? role.trim() : "customer";
+  const rolPedido = typeof role === "string" && role.trim() ? role.trim() : "customer";
   if (!rolAsignable(rolPedido)) {
     return Response.json({ error: at.api.rolInvalido }, { status: 400 });
   }
@@ -187,29 +183,24 @@ export async function POST(request: Request) {
   // Las dos invitaciones van SIN `data`: ese campo escribe `user_metadata`.
   // El rol se fija después, con `elevarRol`.
   if (method !== "link") {
-    const { data, error } = await supabaseAdmin().auth.admin.inviteUserByEmail(
-      email,
-      { redirectTo },
-    );
+    const { data, error } = await supabaseAdmin().auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+    });
     if (!error) {
       const elevado = await elevarRol(data.user?.id, rolPedido, email, !yaExistia);
       if (elevado) return elevado;
       return Response.json({ ok: true, delivery: "email", id: data.user?.id });
     }
     if (!isSupabaseRateLimit(error.message)) {
-      return Response.json(
-        { error: mapSupabaseInviteError(error.message) },
-        { status: 400 },
-      );
+      return Response.json({ error: mapSupabaseInviteError(error.message) }, { status: 400 });
     }
     errorBase = error.message;
   }
-  const { data: linkData, error: linkError } =
-    await supabaseAdmin().auth.admin.generateLink({
-      type: "invite",
-      email,
-      options: { redirectTo },
-    });
+  const { data: linkData, error: linkError } = await supabaseAdmin().auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: { redirectTo },
+  });
   // El link copiable apunta a /auth/confirm (verifyOtp con token_hash), NO al
   // `action_link` default (/auth/v1/verify → code exchange PKCE): el browser
   // que abre un link de email no tiene el code_verifier y ese camino rompe.
@@ -310,23 +301,14 @@ export async function DELETE(request: Request) {
   if (!completa) {
     // Fail-closed: sin la lista entera no se sabe quién creó el sistema, y
     // equivocarse acá es justamente dejar borrar al dueño.
-    return Response.json(
-      { error: at.api.demasiadosUsuarios },
-      { status: 409 },
-    );
+    return Response.json({ error: at.api.demasiadosUsuarios }, { status: 409 });
   }
   const target = users.find((u) => u.id === id);
   if (!target) {
-    return Response.json(
-      { error: at.api.personaNoEncontrada },
-      { status: 400 },
-    );
+    return Response.json({ error: at.api.personaNoEncontrada }, { status: 400 });
   }
   if (target.app_metadata?.role === "developer") {
-    return Response.json(
-      { error: "La cuenta de desarrolladora está protegida." },
-      { status: 403 },
-    );
+    return Response.json({ error: "La cuenta de desarrolladora está protegida." }, { status: 403 });
   }
   // Guarda 2: el fundador es el `created_at` mínimo de la lista COMPLETA.
   const fundador = users.reduce((viejo, u) =>
@@ -342,8 +324,7 @@ export async function DELETE(request: Request) {
   if (target.app_metadata?.role === "admin" && admins.length <= 1) {
     return Response.json({ error: at.api.ultimoAdmin }, { status: 400 });
   }
-  const { error: deleteError } =
-    await supabaseAdmin().auth.admin.deleteUser(id);
+  const { error: deleteError } = await supabaseAdmin().auth.admin.deleteUser(id);
   if (deleteError) {
     return Response.json({ error: at.api.noSePudoQuitar }, { status: 400 });
   }

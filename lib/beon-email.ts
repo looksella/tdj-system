@@ -66,9 +66,13 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     } catch {
       // sin detalle, mensaje genérico
     }
-    throw new Error(msg || "Algún destinatario no recibe más emails de este sistema (rebotó, marcó spam o se dio de baja).");
+    throw new Error(
+      msg ||
+        "Algún destinatario no recibe más emails de este sistema (rebotó, marcó spam o se dio de baja).",
+    );
   }
-  if (res.status === 503) throw new Error("El envío de emails no está habilitado para este sistema.");
+  if (res.status === 503)
+    throw new Error("El envío de emails no está habilitado para este sistema.");
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`Beon Email ${res.status}: ${detail.slice(0, 300)}`);

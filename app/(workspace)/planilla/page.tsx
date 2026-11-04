@@ -1,9 +1,11 @@
 import { PayrollWorkspace } from "@/components/planilla/payroll-workspace";
 import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/require-page-permission";
-import { mesActual } from "@/lib/turno";
+import { mesActual, rangoDelDia } from "@/lib/turno";
+import { formatScheduleTime } from "@/lib/schedule-time";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Planilla" };
 
 /**
  * Planilla del mes: cálculo de horas desde los marcajes, deducciones de ley
@@ -15,9 +17,35 @@ export const dynamic = "force-dynamic";
 export default async function PlanillaPage() {
   await requirePagePermission("payroll:manage");
 
-  const [employeesRaw, linesRaw] = await Promise.all([
-    db.employee.findMany({ orderBy: [{ active: "desc" }, { fullName: "asc" }], take: 50 }),
-    db.payrollLine.findMany({ include: { employee: true }, orderBy: { periodEnd: "desc" }, take: 40 }),
+  const { day } = rangoDelDia();
+  const rosterEnd = new Date(`${day}T00:00:00.000Z`);
+  rosterEnd.setUTCDate(rosterEnd.getUTCDate() + 30);
+  const [employeesRaw, linesRaw, patterns, shifts] = await Promise.all([
+    db.employee.findMany({
+      orderBy: [{ active: "desc" }, { fullName: "asc" }],
+      take: 50,
+      include: {
+        rosters: {
+          where: { date: { gte: new Date(`${day}T00:00:00.000Z`), lt: rosterEnd } },
+          include: { shift: true },
+          orderBy: { date: "asc" },
+        },
+      },
+    }),
+    db.payrollLine.findMany({
+      include: { employee: true },
+      orderBy: { periodEnd: "desc" },
+      take: 40,
+    }),
+    db.shiftPattern.findMany({
+      orderBy: { cycleDays: "asc" },
+      include: { details: { include: { shift: true }, orderBy: { daySequence: "asc" } } },
+    }),
+    db.shift.findMany({
+      where: { isActive: true },
+      orderBy: { startTime: "asc" },
+      select: { id: true, name: true, startTime: true, endTime: true, breakDurationMinutes: true },
+    }),
   ]);
 
   const employees = employeesRaw.map((employee) => ({
@@ -30,6 +58,14 @@ export default async function PlanillaPage() {
     scheduledStart: employee.scheduledStart,
     scheduledEnd: employee.scheduledEnd,
     weeklyHours: Number(employee.weeklyHours),
+    scheduleType: employee.scheduleType,
+    schedulePatternId: employee.schedulePatternId,
+    scheduleAnchorDate: employee.scheduleAnchorDate?.toISOString().slice(0, 10) ?? null,
+    rosters: employee.rosters.map((entry) => ({
+      date: entry.date.toISOString().slice(0, 10),
+      shiftId: entry.shiftId,
+      isOverride: entry.isOverride,
+    })),
     active: employee.active,
   }));
 
@@ -62,5 +98,29 @@ export default async function PlanillaPage() {
     status: line.status,
   }));
 
-  return <PayrollWorkspace employees={employees} lines={lines} month={mesActual()} />;
+  const shiftOptions = shifts.map((shift) => ({
+    ...shift,
+    startTime: formatScheduleTime(shift.startTime),
+    endTime: formatScheduleTime(shift.endTime),
+  }));
+  const patternOptions = patterns.map((pattern) => ({
+    id: pattern.id,
+    name: pattern.name,
+    cycleDays: pattern.cycleDays,
+    details: pattern.details.map((detail) => ({
+      daySequence: detail.daySequence,
+      shiftId: detail.shiftId,
+      isRestDay: detail.isRestDay,
+    })),
+  }));
+  return (
+    <PayrollWorkspace
+      employees={employees}
+      lines={lines}
+      month={mesActual()}
+      patterns={patternOptions}
+      shifts={shiftOptions}
+      scheduleStartDate={day}
+    />
+  );
 }

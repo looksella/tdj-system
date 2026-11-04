@@ -52,15 +52,17 @@ model Producto {
 }
 
 model MovimientoStock {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  productId String   @map("product_id") @db.Uuid
-  delta     Int
-  reason    String
-  reference String?
-  note      String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
-  product   Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  delta          Int
+  reason         String
+  reference      String?
+  note           String?
+  createdBy      String?  @map("created_by")
+  createdByEmail String?  @map("created_by_email")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+  product        Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([productId, createdAt])
   @@map("movimientos_stock")
@@ -236,14 +238,73 @@ model Employee {
   scheduledStart       String           @default("08:00") @map("scheduled_start")
   scheduledEnd         String           @default("17:00") @map("scheduled_end")
   weeklyHours          Decimal          @default(44) @map("weekly_hours") @db.Decimal(4, 1)
+  scheduleType         String           @default("FIXED") @map("schedule_type") @db.VarChar(20)
+  schedulePatternId    String?          @map("schedule_pattern_id") @db.Uuid
+  scheduleAnchorDate   DateTime?        @map("schedule_anchor_date") @db.Date
   active               Boolean          @default(true)
+  schedulePattern      ShiftPattern?    @relation(fields: [schedulePatternId], references: [id], onDelete: Restrict)
+  rosters              EmployeeRoster[]
   cashSessions         CashSession[]
   attendanceMarks      AttendanceMark[]
   payrollLines         PayrollLine[]
   createdAt            DateTime         @default(now()) @map("created_at")
   updatedAt            DateTime         @default(now()) @updatedAt @map("updated_at")
 
+  @@index([schedulePatternId])
   @@map("employees")
+}
+
+model Shift {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String               @unique @db.VarChar(100)
+  startTime            DateTime             @map("start_time") @db.Time(0)
+  endTime              DateTime             @map("end_time") @db.Time(0)
+  breakDurationMinutes Int                  @default(60) @map("break_duration_minutes")
+  isActive             Boolean              @default(true) @map("is_active")
+  patternDetails       ShiftPatternDetail[]
+  employeeRosters      EmployeeRoster[]
+
+  @@map("shifts")
+}
+
+model ShiftPattern {
+  id        String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String               @unique @db.VarChar(100)
+  cycleDays Int                  @map("cycle_days")
+  employees Employee[]
+  details   ShiftPatternDetail[]
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  @@map("shift_patterns")
+}
+
+model ShiftPatternDetail {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patternId   String       @map("pattern_id") @db.Uuid
+  daySequence Int          @map("day_sequence")
+  shiftId     String?      @map("shift_id") @db.Uuid
+  isRestDay   Boolean      @default(false) @map("is_rest_day")
+  pattern     ShiftPattern @relation(fields: [patternId], references: [id], onDelete: Cascade)
+  shift       Shift?       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  @@unique([patternId, daySequence])
+  @@index([shiftId])
+  @@map("shift_pattern_details")
+}
+
+model EmployeeRoster {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  shiftId    String?  @map("shift_id") @db.Uuid
+  date       DateTime @db.Date
+  isOverride Boolean  @default(false) @map("is_override")
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift      Shift?   @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, date])
+  @@index([shiftId])
+  @@map("employee_rosters")
 }
 
 model CashSession {
@@ -354,6 +415,8 @@ model LaborSettings {
   weeklyDayLimit      Decimal  @default(44) @map("weekly_day_limit") @db.Decimal(5, 2)
   dailyNightLimit     Decimal  @default(7) @map("daily_night_limit") @db.Decimal(4, 2)
   weeklyNightLimit    Decimal  @default(39) @map("weekly_night_limit") @db.Decimal(5, 2)
+  minimumRestHours    Int      @default(8) @map("minimum_rest_hours")
+  weekStartsOn        Int      @default(1) @map("week_starts_on")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
 

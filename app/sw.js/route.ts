@@ -15,10 +15,7 @@
 //   - Todo lo que no sea GET pasa derecho a la red.
 export const dynamic = "force-dynamic";
 export function GET() {
-  const build =
-    process.env.VERCEL_DEPLOYMENT_ID ??
-    process.env.VERCEL_GIT_COMMIT_SHA ??
-    "dev";
+  const build = process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "dev";
   const body = `// service worker generado — build ${build}
 const CACHE = "app-${build}";
 const OFFLINE_URL = "/offline";

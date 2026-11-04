@@ -1,4 +1,5 @@
 # Migraciones de datos
+
 Acá viven las **transformaciones de datos** de este sistema: mover un campo a
 otra tabla, renombrarlo, derivar una columna nueva a partir de una vieja.
 Un cambio de schema tiene dos mitades. `prisma/schema.prisma` describe la
@@ -6,13 +7,17 @@ Un cambio de schema tiene dos mitades. `prisma/schema.prisma` describe la
 cargados es la otra mitad, y sin un archivo acá esa mitad no viaja a ningún
 lado: se queda en la base de construcción y el sistema publicado del dueño
 recibe la columna nueva vacía.
+
 ## El contrato
+
 Un archivo por transformación:
+
 ```
 20260824T1530__mover_envio_a_linea.sql
 └──────┬─────┘  └────────┬──────────┘
   timestamp UTC        slug
 ```
+
 - **El timestamp da el orden de aplicación.** Lexicográfico = cronológico.
 - **SQL plano.** Nada de TypeScript: no hace falta runtime de Node para
   correrlo y se lee en un code review.
@@ -22,11 +27,15 @@ Un archivo por transformación:
 - **Un archivo ya aplicado no se edita.** Si cambia de contenido después de
   haber corrido en algún lado, el aplicador falla ruidoso y no re-aplica.
   Corregir se corrige con una migración nueva.
+
 ## Cómo se aplica
+
 En la base de construcción, vos:
+
 ```
 npx prisma db execute --url $DATABASE_URL --file prisma/data-migrations/<archivo>.sql
 ```
+
 En la base publicada (producción) lo hace el pipeline al publicar, en tres
 tiempos: primero crea lo nuevo, después corre estas migraciones, y recién ahí
 borra lo viejo. Si una migración falla, **lo viejo no se borra**: el dato sigue
@@ -40,8 +49,10 @@ Cada base lleva su propio registro de qué corrió, en la tabla
 `beon.data_migrations`. Está fuera del schema de la app a propósito (`public` en
 Neon; `app` / `iteration` en Supabase), para que `prisma db push` no se la lleve
 puesta.
+
 ## El orden de un cambio destructivo
+
 1. Agregar lo nuevo (columna nullable, tabla, tipo).
 2. La migración de datos acá, que llena lo nuevo desde lo viejo.
 3. Borrar lo viejo.
-Nunca al revés.
+   Nunca al revés.

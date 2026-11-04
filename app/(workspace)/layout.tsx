@@ -1,7 +1,9 @@
 import { Sidebar } from "@/components/workspace/sidebar";
 import { redirect } from "next/navigation";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
-export default async function WorkspaceLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function WorkspaceLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   const user = await getEffectiveUser();
   if (!user) redirect("/sign-in");
   return (

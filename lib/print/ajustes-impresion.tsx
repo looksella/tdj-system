@@ -23,8 +23,16 @@ import {
 } from "./config";
 const FAMILIAS: { id: FamiliaImpresion; titulo: string; ayuda: string }[] = [
   { id: "ticket", titulo: "Ticket de venta", ayuda: "El ancho del rollo de tu impresora térmica." },
-  { id: "etiqueta", titulo: "Etiquetas", ayuda: "La medida de las etiquetas autoadhesivas que usás." },
-  { id: "documento", titulo: "Presupuestos y remitos", ayuda: "El tamaño de hoja de tu impresora común." },
+  {
+    id: "etiqueta",
+    titulo: "Etiquetas",
+    ayuda: "La medida de las etiquetas autoadhesivas que usás.",
+  },
+  {
+    id: "documento",
+    titulo: "Presupuestos y remitos",
+    ayuda: "El tamaño de hoja de tu impresora común.",
+  },
 ];
 export function AjustesImpresion() {
   const [elegidos, setElegidos] = useState<Partial<Record<FamiliaImpresion, FormatoId>>>({});

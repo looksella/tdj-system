@@ -146,7 +146,12 @@ export function CargarDesdeArchivo({
         body: JSON.stringify({ archivos, campos, contexto, locale }),
       });
       const data = (await res.json()) as
-        | { ok: true; datos: Record<string, unknown>; confianza: "alta" | "media" | "baja"; observaciones: string[] }
+        | {
+            ok: true;
+            datos: Record<string, unknown>;
+            confianza: "alta" | "media" | "baja";
+            observaciones: string[];
+          }
         | { ok: false; code: string; message: string };
       if (!data.ok) {
         setError({ message: data.message });
@@ -157,7 +162,9 @@ export function CargarDesdeArchivo({
       for (const c of simples) nuevosValores[c.nombre] = comoTexto(data.datos[c.nombre]);
       const nuevasFilas: Record<string, Array<Record<string, string>>> = {};
       for (const c of listas) {
-        const crudas = Array.isArray(data.datos[c.nombre]) ? (data.datos[c.nombre] as unknown[]) : [];
+        const crudas = Array.isArray(data.datos[c.nombre])
+          ? (data.datos[c.nombre] as unknown[])
+          : [];
         nuevasFilas[c.nombre] = crudas.map((fila) => {
           const f: Record<string, string> = {};
           for (const hijo of c.items ?? []) {
@@ -192,7 +199,8 @@ export function CargarDesdeArchivo({
     for (const c of listas) {
       datos[c.nombre] = (filas[c.nombre] ?? []).map((fila) => {
         const salida: Record<string, unknown> = {};
-        for (const hijo of c.items ?? []) salida[hijo.nombre] = tipar(fila[hijo.nombre] ?? "", hijo.tipo);
+        for (const hijo of c.items ?? [])
+          salida[hijo.nombre] = tipar(fila[hijo.nombre] ?? "", hijo.tipo);
         return salida;
       });
     }
@@ -251,7 +259,13 @@ export function CargarDesdeArchivo({
                 <span className="mb-1 block text-muted-foreground">{c.etiqueta}</span>
                 <input
                   className={inputClase}
-                  type={c.tipo === "fecha" ? "date" : c.tipo === "numero" || c.tipo === "moneda" ? "number" : "text"}
+                  type={
+                    c.tipo === "fecha"
+                      ? "date"
+                      : c.tipo === "numero" || c.tipo === "moneda"
+                        ? "number"
+                        : "text"
+                  }
                   step={c.tipo === "moneda" ? "0.01" : undefined}
                   value={valores[c.nombre] ?? ""}
                   onChange={(e) => setValores((v) => ({ ...v, [c.nombre]: e.target.value }))}

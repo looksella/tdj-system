@@ -10,6 +10,7 @@ import {
   Clock3,
   FileText,
   Home,
+  LogOut,
   Menu,
   Package,
   Scale,
@@ -34,6 +35,7 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { isAllowed } from "@/lib/auth-helpers";
+import { signOut } from "@/lib/supabase/actions";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -50,43 +52,115 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
     label: "Ventas",
     items: [
       { id: "inicio", label: "Inicio", href: "/", icon: Home, permission: "dashboard:read" },
-      { id: "punto-de-venta", label: "Punto de venta", href: "/ventas", icon: Store, permission: "pos:read" },
+      {
+        id: "punto-de-venta",
+        label: "Punto de venta",
+        href: "/ventas",
+        icon: Store,
+        permission: "pos:read",
+      },
       { id: "caja", label: "Caja", href: "/caja", icon: Vault, permission: "cash:operate" },
-      { id: "clientes", label: "Clientes", href: "/clientes", icon: Users, permission: "customers:manage" },
-      { id: "dte", label: "DTE y facturación", href: "/dte", icon: FileText, permission: "business:manage" },
+      {
+        id: "clientes",
+        label: "Clientes",
+        href: "/clientes",
+        icon: Users,
+        permission: "customers:manage",
+      },
+      {
+        id: "dte",
+        label: "DTE y facturación",
+        href: "/dte",
+        icon: FileText,
+        permission: "business:manage",
+      },
     ],
   },
   {
     id: "inventario",
     label: "Inventario",
     items: [
-      { id: "inventario", label: "Inventario", href: "/inventario", icon: Package, permission: "inventory:read" },
-      { id: "comparar-precios", label: "Comparar precios", href: "/comparar-precios", icon: Scale, permission: "prices:manage" },
-      { id: "precio-sugerido", label: "Precio sugerido", href: "/precio-sugerido", icon: Tag, permission: "business:manage" },
+      {
+        id: "inventario",
+        label: "Inventario",
+        href: "/inventario",
+        icon: Package,
+        permission: "inventory:read",
+      },
+      {
+        id: "comparar-precios",
+        label: "Comparar precios",
+        href: "/comparar-precios",
+        icon: Scale,
+        permission: "prices:manage",
+      },
+      {
+        id: "precio-sugerido",
+        label: "Precio sugerido",
+        href: "/precio-sugerido",
+        icon: Tag,
+        permission: "business:manage",
+      },
     ],
   },
   {
     id: "compras",
     label: "Compras",
     items: [
-      { id: "compras", label: "Compras", href: "/compras", icon: ShoppingCart, permission: "purchases:manage" },
-      { id: "proveedores", label: "Proveedores", href: "/proveedores", icon: Truck, permission: "suppliers:manage" },
+      {
+        id: "compras",
+        label: "Compras",
+        href: "/compras",
+        icon: ShoppingCart,
+        permission: "purchases:manage",
+      },
+      {
+        id: "proveedores",
+        label: "Proveedores",
+        href: "/proveedores",
+        icon: Truck,
+        permission: "suppliers:manage",
+      },
     ],
   },
   {
     id: "equipo",
     label: "Equipo",
     items: [
-      { id: "usuarios", label: "Usuarios", href: "/admin/usuarios", icon: UserCog, permission: "users:manage" },
-      { id: "asistencia", label: "Asistencia", href: "/asistencia", icon: Clock3, permission: "attendance:punch" },
-      { id: "planilla", label: "Planilla", href: "/planilla", icon: ClipboardList, permission: "payroll:manage" },
+      {
+        id: "usuarios",
+        label: "Usuarios",
+        href: "/admin/usuarios",
+        icon: UserCog,
+        permission: "users:manage",
+      },
+      {
+        id: "asistencia",
+        label: "Asistencia",
+        href: "/asistencia",
+        icon: Clock3,
+        permission: "attendance:punch",
+      },
+      {
+        id: "planilla",
+        label: "Planilla",
+        href: "/planilla",
+        icon: ClipboardList,
+        permission: "payroll:manage",
+      },
     ],
   },
   {
     id: "analisis",
     label: "Análisis",
     items: [
-      { id: "reportes", label: "Reportes", href: "/reportes", icon: BarChart3, permission: "reports:read" },
+      {
+        id: "reportes",
+        label: "Reportes",
+        href: "/reportes",
+        icon: BarChart3,
+        permission: "reports:read",
+      },
     ],
   },
 ];
@@ -101,9 +175,11 @@ function isActivePath(pathname: string, href: string) {
 }
 
 function getSectionForPath(pathname: string) {
-  return navigationSections.find((section) =>
-    section.items.some((item) => isActivePath(pathname, item.href)),
-  )?.id ?? null;
+  return (
+    navigationSections.find((section) =>
+      section.items.some((item) => isActivePath(pathname, item.href)),
+    )?.id ?? null
+  );
 }
 
 function SidebarPanel({
@@ -145,10 +221,7 @@ function SidebarPanel({
     return items.map(({ id, label, href, icon: Icon }, index) => {
       const active = isActivePath(pathname, href);
       return (
-        <div
-          key={`${sectionId}-${id}`}
-          className="flex items-center"
-        >
+        <div key={`${sectionId}-${id}`} className="flex items-center">
           <Link
             href={href}
             prefetch={false}
@@ -173,7 +246,11 @@ function SidebarPanel({
               type="button"
               onClick={() => onFavoriteToggle(id)}
               tabIndex={isOpen ? 0 : -1}
-              aria-label={favorites.includes(id) ? `Quitar ${label} de favoritos` : `Agregar ${label} a favoritos`}
+              aria-label={
+                favorites.includes(id)
+                  ? `Quitar ${label} de favoritos`
+                  : `Agregar ${label} a favoritos`
+              }
               aria-pressed={favorites.includes(id)}
               style={{ transitionDelay: `${index * 50}ms` }}
               className={cn(
@@ -181,7 +258,9 @@ function SidebarPanel({
                 isOpen ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0",
               )}
             >
-              <Star className={cn("size-4", favorites.includes(id) && "fill-amber-400 text-amber-500")} />
+              <Star
+                className={cn("size-4", favorites.includes(id) && "fill-amber-400 text-amber-500")}
+              />
             </button>
           )}
         </div>
@@ -189,12 +268,7 @@ function SidebarPanel({
     });
   }
 
-  function renderSection(
-    id: string,
-    label: string,
-    items: NavItem[],
-    isFavoriteSection = false,
-  ) {
+  function renderSection(id: string, label: string, items: NavItem[], isFavoriteSection = false) {
     const isOpen = activeSection === id;
     const sectionPanelId = `${variant}-sidebar-section-${id}`;
     return (
@@ -202,7 +276,8 @@ function SidebarPanel({
         key={id}
         className={cn(
           "rounded-xl p-1 transition-colors",
-          isFavoriteSection && "border border-amber-300/50 bg-amber-100/45 dark:border-amber-300/15 dark:bg-amber-300/5",
+          isFavoriteSection &&
+            "border border-amber-300/50 bg-amber-100/45 dark:border-amber-300/15 dark:bg-amber-300/5",
         )}
       >
         <div className="flex items-center">
@@ -214,11 +289,19 @@ function SidebarPanel({
             className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-3 text-left text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground transition-colors hover:bg-muted/50"
           >
             <span className="flex min-w-0 items-center gap-2">
-              {isFavoriteSection && <Star className="size-3.5 shrink-0 fill-amber-500 text-amber-600" aria-hidden="true" />}
+              {isFavoriteSection && (
+                <Star
+                  className="size-3.5 shrink-0 fill-amber-500 text-amber-600"
+                  aria-hidden="true"
+                />
+              )}
               <span className="truncate">{label}</span>
             </span>
             <ChevronDown
-              className={cn("size-4 shrink-0 transition-transform duration-300", isOpen && "rotate-180")}
+              className={cn(
+                "size-4 shrink-0 transition-transform duration-300",
+                isOpen && "rotate-180",
+              )}
               aria-hidden="true"
             />
           </button>
@@ -247,7 +330,9 @@ function SidebarPanel({
                 renderItems(items, id, isOpen)
               ) : (
                 <p className="px-3 py-2 text-xs text-muted-foreground">
-                  {isEditingFavorites ? "Marca una estrella para agregar accesos." : "Aún no tienes accesos favoritos."}
+                  {isEditingFavorites
+                    ? "Marca una estrella para agregar accesos."
+                    : "Aún no tienes accesos favoritos."}
                 </p>
               )}
             </div>
@@ -270,7 +355,9 @@ function SidebarPanel({
             <Package className="size-5" aria-hidden="true" />
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-[15px] font-bold tracking-tight">Tienda Don Juan</span>
+            <span className="block truncate text-[15px] font-bold tracking-tight">
+              Tienda Don Juan
+            </span>
             <span className="block text-xs text-muted-foreground">Tu operación, en orden</span>
           </span>
         </Link>
@@ -282,9 +369,7 @@ function SidebarPanel({
         className="sidebar-scroll min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1"
       >
         {renderSection("favoritos", "Favoritos", favoriteItems, true)}
-        {visibleSections.map((section) =>
-          renderSection(section.id, section.label, section.items),
-        )}
+        {visibleSections.map((section) => renderSection(section.id, section.label, section.items))}
       </nav>
 
       {isAllowed(role, "assistant:access") && (
@@ -301,6 +386,16 @@ function SidebarPanel({
           <span>Asistente IA</span>
         </Link>
       )}
+      <form action={signOut} className="mt-3 shrink-0 border-t border-sidebar-border pt-3">
+        <Button
+          type="submit"
+          variant="ghost"
+          className="min-h-11 w-full justify-start gap-3 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        >
+          <LogOut className="size-4" aria-hidden="true" />
+          Cerrar sesión
+        </Button>
+      </form>
     </div>
   );
 }
@@ -383,27 +478,34 @@ export function Sidebar({ role }: { role: string }) {
             <span className="block text-[11px] text-muted-foreground">Tu operación, en orden</span>
           </span>
         </Link>
-        <Drawer open={mobileOpen} onOpenChange={setMobileOpen} direction="left">
-          <DrawerTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Abrir menú de navegación">
-              <Menu className="size-5" />
+        <div className="flex items-center gap-1">
+          <form action={signOut}>
+            <Button type="submit" variant="ghost" size="icon" aria-label="Cerrar sesión">
+              <LogOut className="size-5" />
             </Button>
-          </DrawerTrigger>
-          <DrawerContent className="h-dvh max-h-dvh w-[min(20rem,85vw)] rounded-none border-r border-sidebar-border p-0">
-            <DrawerTitle className="sr-only">Menú de navegación</DrawerTitle>
-            <SidebarPanel
-              {...panelProps}
-              variant="mobile"
-              closeButton={
-                <DrawerClose asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label="Cerrar menú de navegación">
-                    <X className="size-4" />
-                  </Button>
-                </DrawerClose>
-              }
-            />
-          </DrawerContent>
-        </Drawer>
+          </form>
+          <Drawer open={mobileOpen} onOpenChange={setMobileOpen} direction="left">
+            <DrawerTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Abrir menú de navegación">
+                <Menu className="size-5" />
+              </Button>
+            </DrawerTrigger>
+            <DrawerContent className="h-dvh max-h-dvh w-[min(20rem,85vw)] rounded-none border-r border-sidebar-border p-0">
+              <DrawerTitle className="sr-only">Menú de navegación</DrawerTitle>
+              <SidebarPanel
+                {...panelProps}
+                variant="mobile"
+                closeButton={
+                  <DrawerClose asChild>
+                    <Button variant="ghost" size="icon-sm" aria-label="Cerrar menú de navegación">
+                      <X className="size-4" />
+                    </Button>
+                  </DrawerClose>
+                }
+              />
+            </DrawerContent>
+          </Drawer>
+        </div>
       </div>
     </>
   );

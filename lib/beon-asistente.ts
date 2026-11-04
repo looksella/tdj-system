@@ -13,11 +13,7 @@ export type AsistenteRespuesta =
   | {
       ok: false;
       code:
-        | "insufficient_credits"
-        | "daily_ai_cap_reached"
-        | "disabled"
-        | "not_published"
-        | "error";
+        "insufficient_credits" | "daily_ai_cap_reached" | "disabled" | "not_published" | "error";
       message: string;
     };
 export interface AsistenteConfig {
@@ -48,7 +44,11 @@ export async function preguntar(input: {
 }): Promise<AsistenteRespuesta> {
   const p = proxy();
   if (!p) {
-    return { ok: false, code: "disabled", message: "El asistente no está configurado en este sistema." };
+    return {
+      ok: false,
+      code: "disabled",
+      message: "El asistente no está configurado en este sistema.",
+    };
   }
   let res: Response;
   try {
@@ -59,7 +59,11 @@ export async function preguntar(input: {
       cache: "no-store",
     });
   } catch {
-    return { ok: false, code: "error", message: "No pudimos consultar tu sistema. Probá de nuevo en un momento." };
+    return {
+      ok: false,
+      code: "error",
+      message: "No pudimos consultar tu sistema. Probá de nuevo en un momento.",
+    };
   }
   if (res.status === 402) {
     return {
@@ -79,13 +83,21 @@ export async function preguntar(input: {
     return { ok: false, code: "disabled", message: "El asistente está desactivado." };
   }
   if (!res.ok) {
-    return { ok: false, code: "error", message: "No pudimos consultar tu sistema. Probá de nuevo en un momento." };
+    return {
+      ok: false,
+      code: "error",
+      message: "No pudimos consultar tu sistema. Probá de nuevo en un momento.",
+    };
   }
   let body: { result?: Record<string, unknown> };
   try {
     body = (await res.json()) as { result?: Record<string, unknown> };
   } catch {
-    return { ok: false, code: "error", message: "No pudimos consultar tu sistema. Probá de nuevo en un momento." };
+    return {
+      ok: false,
+      code: "error",
+      message: "No pudimos consultar tu sistema. Probá de nuevo en un momento.",
+    };
   }
   const r = body.result ?? {};
   const derived = (r.derived as string | null) ?? null;
@@ -93,13 +105,14 @@ export async function preguntar(input: {
     return {
       ok: false,
       code: "not_published",
-      message: "Todavía no publicaste este sistema, así que no hay datos de producción que consultar.",
+      message:
+        "Todavía no publicaste este sistema, así que no hay datos de producción que consultar.",
     };
   }
   return {
     ok: true,
     answer: (r.answer as string | null) ?? null,
-    kind: ((r.kind as AsistenteKind) ?? "derived"),
+    kind: (r.kind as AsistenteKind) ?? "derived",
     derived,
     tablesUsed: (r.tables_used as string[]) ?? [],
     rowCount: (r.row_count as number) ?? 0,

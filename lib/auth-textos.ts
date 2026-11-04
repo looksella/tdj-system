@@ -42,8 +42,7 @@ export const AUTH_COPY = {
     },
     // Copy shown when Supabase Auth is not configured.
     loginInactivo: {
-      abierto:
-        "No se puede iniciar sesión hasta configurar las variables públicas de Supabase.",
+      abierto: "No se puede iniciar sesión hasta configurar las variables públicas de Supabase.",
       comoSeActiva:
         "Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY, y crea el primer administrador con npm run create-admin.",
     },
@@ -75,8 +74,7 @@ export const AUTH_COPY = {
       inviteDetalle: "Vas a elegir tu contraseña para entrar al sistema.",
       inviteCta: "Activar mi cuenta",
       recoveryTitulo: "Elegí una contraseña nueva",
-      recoveryDetalle:
-        "Confirmá que sos vos y te llevamos a elegir tu contraseña.",
+      recoveryDetalle: "Confirmá que sos vos y te llevamos a elegir tu contraseña.",
       recoveryCta: "Continuar",
       signupTitulo: "Confirmá tu email",
       signupDetalle: "Un último paso para terminar de crear tu cuenta.",
@@ -182,15 +180,18 @@ export const AUTH_COPY = {
       faltaEmailOPassword: "Completá email y contraseña",
       passwordCorta: "Mínimo 8 caracteres, con letras y números",
       personaNoEncontrada: "No encontramos a esa persona en la lista de usuarios.",
-      personaYaActiva: "Esta persona ya eligió su contraseña, así que no necesita un link de invitación. Si no puede entrar, decile que use «Olvidé mi contraseña» en /forgot-password.",
+      personaYaActiva:
+        "Esta persona ya eligió su contraseña, así que no necesita un link de invitación. Si no puede entrar, decile que use «Olvidé mi contraseña» en /forgot-password.",
       noTePodesQuitar: "No podés quitarte a vos mismo del sistema.",
-      fundadorNoSeQuita: "No se puede quitar a quien creó el sistema: esa cuenta es la del dueño y siempre tiene que poder entrar.",
-      demasiadosUsuarios: "Hay demasiados usuarios para verificar quién creó el sistema, así que por seguridad no se quita a nadie.",
-      ultimoAdmin: "No podés quitar al último administrador: el sistema quedaría sin nadie que pueda administrarlo.",
+      fundadorNoSeQuita:
+        "No se puede quitar a quien creó el sistema: esa cuenta es la del dueño y siempre tiene que poder entrar.",
+      demasiadosUsuarios:
+        "Hay demasiados usuarios para verificar quién creó el sistema, así que por seguridad no se quita a nadie.",
+      ultimoAdmin:
+        "No podés quitar al último administrador: el sistema quedaría sin nadie que pueda administrarlo.",
       noSePudoQuitar: "No se pudo quitar a esa persona.",
       rolInvalido: "Ese rol no existe en este sistema.",
-      rolNoAplicado:
-        "No pudimos asignarle el rol a esa persona. Probá de nuevo.",
+      rolNoAplicado: "No pudimos asignarle el rol a esa persona. Probá de nuevo.",
     },
     errores: {
       rateLimit:
@@ -239,8 +240,7 @@ export const AUTH_COPY = {
         "O Supabase Auth não está configurado. Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.",
     },
     loginInactivo: {
-      abierto:
-        "Não é possível entrar até configurar as variáveis públicas do Supabase.",
+      abierto: "Não é possível entrar até configurar as variáveis públicas do Supabase.",
       comoSeActiva:
         "Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY e crie o primeiro administrador com npm run create-admin.",
     },
@@ -255,8 +255,7 @@ export const AUTH_COPY = {
       incompletoDetalle:
         "Copie o link inteiro da mensagem que você recebeu, ou peça um novo por aqui.",
       genericoTitulo: "Não conseguimos verificar este link",
-      genericoDetalle:
-        "Ele pode ter vencido ou já ter sido usado. Peça um novo e tente de novo.",
+      genericoDetalle: "Ele pode ter vencido ou já ter sido usado. Peça um novo e tente de novo.",
       ctaLinkNuevo: "Receber um link novo",
       ctaIniciarSesion: "Ir para o login",
     },
@@ -265,8 +264,7 @@ export const AUTH_COPY = {
       inviteDetalle: "Você vai escolher sua senha para entrar no sistema.",
       inviteCta: "Ativar minha conta",
       recoveryTitulo: "Escolha uma senha nova",
-      recoveryDetalle:
-        "Confirme que é você e levamos você para escolher sua senha.",
+      recoveryDetalle: "Confirme que é você e levamos você para escolher sua senha.",
       recoveryCta: "Continuar",
       signupTitulo: "Confirme seu e-mail",
       signupDetalle: "Um último passo para terminar de criar sua conta.",
@@ -367,15 +365,18 @@ export const AUTH_COPY = {
       faltaEmailOPassword: "Preencha e-mail e senha",
       passwordCorta: "Mínimo de 8 caracteres, com letras e números",
       personaNoEncontrada: "Não encontramos essa pessoa na lista de usuários.",
-      personaYaActiva: "Essa pessoa já escolheu a senha, então não precisa de link de convite. Se ela não conseguir entrar, peça que use «Esqueci minha senha» em /forgot-password.",
+      personaYaActiva:
+        "Essa pessoa já escolheu a senha, então não precisa de link de convite. Se ela não conseguir entrar, peça que use «Esqueci minha senha» em /forgot-password.",
       noTePodesQuitar: "Você não pode remover a si mesmo do sistema.",
-      fundadorNoSeQuita: "Não é possível remover quem criou o sistema: essa conta é a do dono e sempre precisa conseguir entrar.",
-      demasiadosUsuarios: "Há usuários demais para verificar quem criou o sistema, então por segurança ninguém é removido.",
-      ultimoAdmin: "Você não pode remover o último administrador: o sistema ficaria sem ninguém para administrá-lo.",
+      fundadorNoSeQuita:
+        "Não é possível remover quem criou o sistema: essa conta é a do dono e sempre precisa conseguir entrar.",
+      demasiadosUsuarios:
+        "Há usuários demais para verificar quem criou o sistema, então por segurança ninguém é removido.",
+      ultimoAdmin:
+        "Você não pode remover o último administrador: o sistema ficaria sem ninguém para administrá-lo.",
       noSePudoQuitar: "Não foi possível remover essa pessoa.",
       rolInvalido: "Esse papel não existe neste sistema.",
-      rolNoAplicado:
-        "Não conseguimos atribuir o papel a essa pessoa. Tente de novo.",
+      rolNoAplicado: "Não conseguimos atribuir o papel a essa pessoa. Tente de novo.",
     },
     errores: {
       rateLimit:

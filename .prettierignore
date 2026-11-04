@@ -1,0 +1,4 @@
+.cloud-attachments/
+.next/
+node_modules/
+out/

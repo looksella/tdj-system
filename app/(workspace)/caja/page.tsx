@@ -5,6 +5,7 @@ import { requirePagePermission } from "@/lib/require-page-permission";
 import { empleadoVinculado } from "@/lib/turno";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Caja" };
 
 /**
  * Caja del turno: apertura, movimientos, cierre, arqueo y reporte PDF.
@@ -70,7 +71,9 @@ export default async function CajaPage() {
   return (
     <CashWorkspace
       sessions={visibles}
-      employees={esEmpleado && propio ? [{ id: propio.id, fullName: propio.fullName }] : employeesRaw}
+      employees={
+        esEmpleado && propio ? [{ id: propio.id, fullName: propio.fullName }] : employeesRaw
+      }
       canOperateSession={canOperateSession}
       canManageReports={user.role === "admin"}
     />

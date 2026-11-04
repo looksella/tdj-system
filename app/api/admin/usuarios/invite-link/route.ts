@@ -42,23 +42,16 @@ export async function POST(request: Request) {
   }
   const { email } = await request.json();
   const origin = new URL(request.url).origin;
-  const { data: listData, error: listError } =
-    await supabaseAdmin().auth.admin.listUsers();
+  const { data: listData, error: listError } = await supabaseAdmin().auth.admin.listUsers();
   if (listError) {
     return Response.json({ error: listError.message }, { status: 500 });
   }
   const target = listData.users.find((u) => u.email === email);
   if (!target) {
-    return Response.json(
-      { error: at.api.personaNoEncontrada },
-      { status: 400 },
-    );
+    return Response.json({ error: at.api.personaNoEncontrada }, { status: 400 });
   }
   if (target.app_metadata?.role === "developer") {
-    return Response.json(
-      { error: "La cuenta de desarrolladora está protegida." },
-      { status: 403 },
-    );
+    return Response.json({ error: "La cuenta de desarrolladora está protegida." }, { status: 403 });
   }
   // El gate mira el HECHO de haber elegido contraseña, no `last_sign_in_at`:
   // ese campo se prende al ABRIR el link (`verifyOtp` crea sesión), así que
@@ -67,8 +60,7 @@ export async function POST(request: Request) {
   if (target.user_metadata?.activado_at) {
     return Response.json(
       {
-        error:
-          at.api.personaYaActiva,
+        error: at.api.personaYaActiva,
       },
       { status: 400 },
     );

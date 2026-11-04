@@ -1,10 +1,10 @@
-# Buen Negocio
+# Tienda Don Juan
 
 Sistema de gestión comercial construido con Next.js, Prisma, PostgreSQL y Supabase Auth.
 
 ## Requisitos
 
-- Node.js 22 o superior.
+- Node.js 22.12 o superior.
 - Un proyecto Supabase con PostgreSQL y Authentication habilitados.
 
 ## Configuración local
@@ -51,16 +51,27 @@ npm run dev
 
 Abre `http://localhost:3000/sign-in` e inicia sesión con la cuenta correspondiente. Desde **Usuarios**, los administradores pueden invitar otras cuentas de administrador o de empleado.
 
+### Calidad del código
+
+```powershell
+npm run lint
+npm run format:check
+npm test
+npm run build
+```
+
+GitHub Actions ejecuta estas verificaciones en cada push y pull request.
+
 ### Qué ve cada rol
 
-| Herramienta | Empleado | Administrador |
-| --- | --- | --- |
-| Inventario, punto de venta | ✅ | ✅ |
+| Herramienta                                                     | Empleado         | Administrador       |
+| --------------------------------------------------------------- | ---------------- | ------------------- |
+| Inventario, punto de venta                                      | ✅               | ✅                  |
 | Caja del turno (apertura, movimientos, arqueo, PDF y compartir) | ✅ solo su turno | ✅ todos los turnos |
-| Asistencia (marcaje por PIN) | ✅ solo su ficha | ✅ cualquier ficha |
-| Corregir marcajes y tolerancia | — | ✅ |
-| Planilla, salarios, deducciones y recibos | — | ✅ |
-| Personas, horarios, PIN y correo de la cuenta | — | ✅ |
+| Asistencia (marcaje por PIN)                                    | ✅ solo su ficha | ✅ cualquier ficha  |
+| Corregir marcajes y tolerancia                                  | —                | ✅                  |
+| Planilla, salarios, deducciones y recibos                       | —                | ✅                  |
+| Personas, horarios, PIN y correo de la cuenta                   | —                | ✅                  |
 
 El empleado queda ligado a su ficha por el **correo de su cuenta**: se escribe al crear la persona en **Planilla → Personas y condiciones**. Sin ese correo, la cuenta de empleado puede cobrar ventas pero no abrir caja ni marcar asistencia, porque no hay a quién atribuir el turno.
 
@@ -95,3 +106,29 @@ Empareja los artículos vendidos con los que ya existen (ignorando acentos, may�
 Antes de escribir deja `prisma/data/backup/productos-<fecha>.csv` y `reconciliacion-<fecha>.csv` con el detalle de cada decisión (nuevo, precio actualizado, desactivado). Los artículos que no se puede afirmar que sean el mismo producto se crean como nuevos: es preferible un nombre repetido a fusionar dos productos distintos.
 
 Obtén ambas cadenas en Supabase → **Connect**; no construyas manualmente el host o el usuario del pooler. Reemplaza el marcador de contraseña, codificando caracteres especiales de la contraseña en la URI, y no publiques estas cadenas. Los cambios de esquema se aplican por separado con `npm run setup` desde un entorno que pueda acceder a PostgreSQL; no durante el build.
+
+### Migración versionada de jornadas rotativas
+
+Para este cambio específico, usa la migración SQL versionada, no `npm run setup`.
+En Supabase → **Connect**, copia la URI **Session pooler** y asígnala a
+`DIRECT_DATABASE_URL` en `.env`; la conexión directa `db.<project-ref>.supabase.co`
+puede no ser accesible desde redes IPv4. Copia la URI completa del panel y reemplaza
+su marcador de contraseña localmente. Para evitar errores de codificación, usa una
+contraseña con letras, números y `- _ . ~`, o codifica los caracteres reservados de
+la contraseña antes de insertarla en la URI. No compartas la URI ni capturas de `.env`.
+
+Antes de aplicarla, confirma el proyecto/entorno en Supabase y crea un respaldo si la
+base tiene datos reales. En PowerShell, desde la raíz del proyecto:
+
+```powershell
+npm run check-db
+npm run db:migrate-schedules
+npx prisma generate
+npm test
+npm run build
+```
+
+El comando `db:migrate-schedules` carga `.env`, toma `DIRECT_DATABASE_URL` y pasa la
+conexión al proceso Prisma como variable de entorno, no como argumento visible. Aplica
+únicamente `prisma/migrations/20261104155100_rotating_employee_schedules/migration.sql`;
+el SQL es aditivo y puede ejecutarse otra vez de forma segura.

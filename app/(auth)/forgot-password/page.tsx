@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { at } from "@/lib/auth-textos";
 import { createClient } from "@/lib/supabase/client";
@@ -37,21 +38,17 @@ export default function ForgotPasswordPage() {
     return (
       <div className="w-full max-w-sm space-y-4 text-center">
         <h1 className="text-2xl font-bold">{at.comun.revisaTuEmail}</h1>
-        <p className="text-sm text-muted-foreground">
-          {at.forgot.revisaTuEmailDetalle}
-        </p>
-        <a href="/sign-in" className="text-sm underline">
+        <p className="text-sm text-muted-foreground">{at.forgot.revisaTuEmailDetalle}</p>
+        <Link href="/sign-in" className="text-sm underline">
           {at.comun.volverAlLogin}
-        </a>
+        </Link>
       </div>
     );
   }
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
       <h1 className="text-2xl font-bold text-center">{at.forgot.titulo}</h1>
-      <p className="text-center text-sm text-muted-foreground">
-        {at.forgot.bajada}
-      </p>
+      <p className="text-center text-sm text-muted-foreground">{at.forgot.bajada}</p>
       <div className="space-y-2">
         <label htmlFor="email" className="text-sm font-medium">
           {at.comun.email}
@@ -75,9 +72,9 @@ export default function ForgotPasswordPage() {
         {loading ? at.forgot.enviando : at.forgot.cta}
       </button>
       <p className="text-center text-sm text-muted-foreground">
-        <a href="/sign-in" className="underline">
+        <Link href="/sign-in" className="underline">
           {at.comun.volverAlLogin}
-        </a>
+        </Link>
       </p>
     </form>
   );

@@ -2,14 +2,22 @@
   "name": "tdj-system",
   "version": "0.0.1",
   "private": true,
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
     "postinstall": "prisma generate",
     "setup": "prisma generate && prisma db push --skip-generate --accept-data-loss",
     "seed": "node --env-file=.env prisma/seed.mjs",
     "check-db": "node --env-file=.env scripts/check-db.mjs",
+    "db:migrate-schedules": "node --env-file=.env scripts/apply-rotating-schedule-migration.mjs",
     "sincronizar-inventario": "node --env-file=.env scripts/sincronizar-inventario.mjs",
     "create-admin": "node --env-file=.env scripts/create-user.mjs admin",
     "create-developer": "node --env-file=.env scripts/create-user.mjs developer"
@@ -25,7 +33,7 @@
     "date-fns": "^4.4.0",
     "embla-carousel-react": "^8.6.0",
     "lucide-react": "^1.17.0",
-    "next": "^16.4.2",
+    "next": "16.4.2",
     "next-themes": "^0.4.6",
     "pdfkit": "^0.20.2",
     "radix-ui": "^1.4.3",
@@ -42,12 +50,17 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22.20.5",
     "@types/pdfkit": "^0.17.7",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.10",
     "prisma": "5.22.0",
     "tailwindcss": "4.3.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.1.0"
   }
 }

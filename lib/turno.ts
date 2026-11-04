@@ -41,13 +41,42 @@ export function mesActual(date = new Date()) {
   return `${value.year}-${value.month}`;
 }
 
+function instanteEnZona(day: string, time: string) {
+  const target = Date.parse(`${day}T${time}:00Z`);
+  let guess = target;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const value = partes(new Date(guess), {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    const renderedAsUtc = Date.UTC(
+      Number(value.year),
+      Number(value.month) - 1,
+      Number(value.day),
+      Number(value.hour),
+      Number(value.minute),
+      Number(value.second),
+    );
+    guess = target - (renderedAsUtc - guess);
+  }
+  return new Date(guess);
+}
+
 /** Límites del día del negocio, en UTC listo para Prisma. */
 export function rangoDelDia(date = new Date()) {
   const day = claveDia(date);
+  const nextDayDate = new Date(`${day}T00:00:00Z`);
+  nextDayDate.setUTCDate(nextDayDate.getUTCDate() + 1);
+  const nextDay = nextDayDate.toISOString().slice(0, 10);
   return {
     day,
-    start: new Date(`${day}T00:00:00-06:00`),
-    end: new Date(`${day}T23:59:59-06:00`),
+    start: instanteEnZona(day, "00:00"),
+    end: instanteEnZona(nextDay, "00:00"),
   };
 }
 

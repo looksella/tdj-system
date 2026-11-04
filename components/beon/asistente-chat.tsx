@@ -14,9 +14,7 @@ type Respuesta =
       empty: boolean;
     }
   | { ok: false; code: string; message: string };
-type Turno =
-  | { rol: "yo"; texto: string }
-  | { rol: "sistema"; texto: string; fuente?: string };
+type Turno = { rol: "yo"; texto: string } | { rol: "sistema"; texto: string; fuente?: string };
 const COPY = {
   es: {
     titulo: "Asistente IA",
@@ -29,10 +27,8 @@ const COPY = {
     costo: (n: string) => `Cada pregunta usa ≈ ${n} créditos del servicio configurado.`,
     basadoEn: (tablas: string) => `Basado en: ${tablas}`,
     vacio: "No encontré registros con ese filtro. ¿Querés que busque de otra forma?",
-    derivado:
-      "Puedo responder preguntas sobre los datos de tu sistema y sobre cómo funciona.",
-    apagado:
-      "El asistente está desactivado o no tiene un servicio configurado.",
+    derivado: "Puedo responder preguntas sobre los datos de tu sistema y sobre cómo funciona.",
+    apagado: "El asistente está desactivado o no tiene un servicio configurado.",
     sinCreditos: "El servicio del asistente no tiene saldo disponible. Revisa su configuración.",
     limpiar: "Empezar de nuevo",
     error: "No pudimos consultar tu sistema. Probá de nuevo en un momento.",
@@ -48,10 +44,8 @@ const COPY = {
     costo: (n: string) => `Cada pergunta usa ≈ ${n} créditos do serviço configurado.`,
     basadoEn: (tablas: string) => `Com base em: ${tablas}`,
     vacio: "Não encontrei registros com esse filtro. Quer que eu busque de outro jeito?",
-    derivado:
-      "Posso responder perguntas sobre os dados do seu sistema e sobre como ele funciona.",
-    apagado:
-      "O assistente está desativado ou não tem um serviço configurado.",
+    derivado: "Posso responder perguntas sobre os dados do seu sistema e sobre como ele funciona.",
+    apagado: "O assistente está desativado ou não tem um serviço configurado.",
     sinCreditos: "O serviço do assistente está sem saldo disponível. Confira a configuração.",
     limpiar: "Começar de novo",
     error: "Não conseguimos consultar seu sistema. Tente de novo em um instante.",
@@ -123,11 +117,7 @@ export function AsistenteChat({
   // El aviso de "sin créditos" se arma con el copy YA resuelto y no con una
   // copia en el estado inicial: así sigue el idioma del negocio aunque el
   // componente se vuelva a montar.
-  const avisoVisible =
-    aviso ??
-    (ownerHasCredits
-      ? null
-      : copy.sinCreditos);
+  const avisoVisible = aviso ?? (ownerHasCredits ? null : copy.sinCreditos);
   const finRef = useRef<HTMLDivElement>(null);
   // El hilo de antes. Va en un efecto y no en el estado inicial porque el
   // servidor no tiene `localStorage`: leerlo en el render inicial daría un
@@ -181,10 +171,7 @@ export function AsistenteChat({
         return;
       }
       if (data.empty) {
-        setTurnos((t) => [
-          ...t,
-          { rol: "sistema", texto: data.answer || copy.vacio },
-        ]);
+        setTurnos((t) => [...t, { rol: "sistema", texto: data.answer || copy.vacio }]);
         return;
       }
       // Solo las TABLAS, sin el conteo de filas: ese número es del resultado
@@ -195,10 +182,7 @@ export function AsistenteChat({
         data.kind === "data" && data.tablesUsed.length
           ? copy.basadoEn(data.tablesUsed.join(", "))
           : undefined;
-      setTurnos((t) => [
-        ...t,
-        { rol: "sistema", texto: data.answer || copy.error, fuente },
-      ]);
+      setTurnos((t) => [...t, { rol: "sistema", texto: data.answer || copy.error, fuente }]);
     } catch {
       setAviso(copy.error);
     } finally {
@@ -225,16 +209,12 @@ export function AsistenteChat({
         </div>
         <p className="mt-1 text-sm opacity-70">{copy.bajada}</p>
         {sandbox ? (
-          <p className="mt-2 rounded-lg bg-black/5 px-3 py-2 text-xs opacity-80">
-            {copy.prueba}
-          </p>
+          <p className="mt-2 rounded-lg bg-black/5 px-3 py-2 text-xs opacity-80">{copy.prueba}</p>
         ) : null}
       </header>
       {turnos.length === 0 && suggestedQuestions.length > 0 ? (
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide opacity-60">
-            {copy.proba}
-          </p>
+          <p className="text-xs font-medium uppercase tracking-wide opacity-60">{copy.proba}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {suggestedQuestions.map((q) => (
               <button
@@ -271,9 +251,7 @@ export function AsistenteChat({
         <div ref={finRef} />
       </div>
       {avisoVisible ? (
-        <p className="rounded-lg border border-black/10 px-3 py-2 text-sm">
-          {avisoVisible}
-        </p>
+        <p className="rounded-lg border border-black/10 px-3 py-2 text-sm">{avisoVisible}</p>
       ) : null}
       <form
         onSubmit={(e) => {

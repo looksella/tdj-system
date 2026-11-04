@@ -29,7 +29,11 @@ const SIN_PERMISO = packDeTextos({
  * Supabase en "la app queda abierta", que es exactamente el modo de falla que
  * este guard existe para cerrar. El error se loguea: nunca en silencio.
  */
-async function rechazo(accion: string): Promise<string | null> {
+type UsuarioAutorizado = NonNullable<Awaited<ReturnType<typeof getEffectiveUser>>>;
+type ResultadoAutorizacion =
+  { usuario: UsuarioAutorizado; denial: null } | { usuario: null; denial: string };
+
+export async function autorizarAccion(accion: string): Promise<ResultadoAutorizacion> {
   let usuario: Awaited<ReturnType<typeof getEffectiveUser>>;
   try {
     usuario = await getEffectiveUser();
@@ -38,21 +42,23 @@ async function rechazo(accion: string): Promise<string | null> {
       `[guard-autorizacion] no se pudo leer la sesión para "${accion}": se niega`,
       error,
     );
-    return SIN_PERMISO;
+    return { usuario: null, denial: SIN_PERMISO };
   }
   if (!usuario || !isAllowed(usuario.role, accion)) {
-    return SIN_PERMISO;
+    return { usuario: null, denial: SIN_PERMISO };
   }
-  return null;
+  return { usuario, denial: null };
+}
+
+async function rechazo(accion: string): Promise<string | null> {
+  return (await autorizarAccion(accion)).denial;
 }
 /**
  * Para route handlers. `null` = seguí; una `NextResponse` 403 = cortá y
  * devolvela tal cual. `codigo` es lo que lee la UI; `error` es el texto para
  * cuando se muestra crudo (los moldes lo pasan a `toast.error`).
  */
-export async function guardMutacion(
-  accion: string,
-): Promise<NextResponse | null> {
+export async function guardMutacion(accion: string): Promise<NextResponse | null> {
   const texto = await rechazo(accion);
   if (texto === null) return null;
   return NextResponse.json({ error: texto, codigo: "forbidden" }, { status: 403 });

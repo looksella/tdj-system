@@ -27,6 +27,7 @@
  * a suspense boundary". Por eso el contenido vive en un componente aparte.
  */
 import { Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { at } from "@/lib/auth-textos";
 /** Qué pasó con el link. Lo escriben /auth/confirm y /auth/callback. */
@@ -58,17 +59,17 @@ function AccesoContenido() {
     <div className="w-full max-w-sm space-y-4 text-center">
       <h1 className="text-2xl font-bold">{titulo}</h1>
       <p className="text-sm text-muted-foreground">{detalle}</p>
-      <a
+      <Link
         href={ctaHref}
         className="block w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
       >
         {ctaTexto}
-      </a>
+      </Link>
       {ctaHref !== "/sign-in" && (
         <p className="text-sm text-muted-foreground">
-          <a href="/sign-in" className="underline">
+          <Link href="/sign-in" className="underline">
             {at.comun.volverAlLogin}
-          </a>
+          </Link>
         </p>
       )}
     </div>
@@ -77,11 +78,7 @@ function AccesoContenido() {
 export default function AccesoPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
-      <Suspense
-        fallback={
-          <p className="text-sm text-muted-foreground">{at.comun.cargando}</p>
-        }
-      >
+      <Suspense fallback={<p className="text-sm text-muted-foreground">{at.comun.cargando}</p>}>
         <AccesoContenido />
       </Suspense>
     </div>

@@ -112,21 +112,33 @@
   --sidebar-ring: oklch(0.72 0.09 155);
 }
 @layer base {
-  * { @apply border-border outline-ring/50; }
+  * {
+    @apply border-border outline-ring/50;
+  }
   body {
     @apply bg-background text-foreground;
     background-image: linear-gradient(135deg, oklch(0.98 0.015 95 / 0.75), transparent 52%);
     font-family: var(--font-app-sans), sans-serif;
   }
-  h1, h2, h3 { letter-spacing: var(--tracking-tight); }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: var(--tracking-tight);
+  }
 }
 @layer components {
-  .panel-shadow { box-shadow: var(--shadow); }
-  .display-heading { font-family: var(--font-app-display), serif; }
+  .panel-shadow {
+    box-shadow: var(--shadow);
+  }
+  .display-heading {
+    font-family: var(--font-app-display), serif;
+  }
   .sidebar-scroll {
     scrollbar-width: none;
   }
-  .sidebar-scroll::-webkit-scrollbar { display: none; }
+  .sidebar-scroll::-webkit-scrollbar {
+    display: none;
+  }
   /* Encabezado chico de tarjeta (turno, caja, planilla). */
   .eyebrow {
     font-size: 10px;
@@ -136,5 +148,7 @@
     color: var(--muted-foreground);
   }
   /* Tarjeta con la sombra suave de la identidad del proyecto. */
-  .surface-card { box-shadow: var(--shadow); }
+  .surface-card {
+    box-shadow: var(--shadow);
+  }
 }

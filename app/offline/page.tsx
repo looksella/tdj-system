@@ -1,5 +1,5 @@
 // Offline page shown when the user opens the app without a network connection.
-// The service worker caches this static page during installation.
+// The service worker caches this page during installation.
 //   - Estática: sin fetch, sin DB, sin cookies. Si dependiera de la red no
 //     serviría justo cuando hace falta.
 //   - Estilos inline: no importa nada de components/ui ni depende del
@@ -7,7 +7,11 @@
 //     paleta del proyecto.
 //   - Server Component sin interactividad salvo el botón de recargar, que
 //     es un <a> al mismo path (no necesita "use client").
-export const dynamic = "force-static";
+// Next must render this page per request to nonce its inline bootstrap scripts.
+import Link from "next/link";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Sin conexión" };
 export default function OfflinePage() {
   const name = process.env.NEXT_PUBLIC_APP_NAME || "Mi sistema";
   return (
@@ -21,8 +25,7 @@ export default function OfflinePage() {
         gap: "1rem",
         padding: "2rem",
         textAlign: "center",
-        fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         color: "#18181b",
         background: "#ffffff",
       }}
@@ -36,9 +39,7 @@ export default function OfflinePage() {
       >
         ⚡
       </div>
-      <h1 style={{ fontSize: "1.25rem", fontWeight: 600, margin: 0 }}>
-        Sin conexión
-      </h1>
+      <h1 style={{ fontSize: "1.25rem", fontWeight: 600, margin: 0 }}>Sin conexión</h1>
       <p
         style={{
           margin: 0,
@@ -47,10 +48,10 @@ export default function OfflinePage() {
           maxWidth: "28rem",
         }}
       >
-        No pudimos conectarnos para mostrarte {name}. Revisá tu conexión y
-        volvé a intentar — tus datos están a salvo en el servidor.
+        No pudimos conectarnos para mostrarte {name}. Revisá tu conexión y volvé a intentar — tus
+        datos están a salvo en el servidor.
       </p>
-      <a
+      <Link
         href="/"
         style={{
           marginTop: "0.5rem",
@@ -65,7 +66,7 @@ export default function OfflinePage() {
         }}
       >
         Volver a intentar
-      </a>
+      </Link>
     </div>
   );
 }

@@ -10,7 +10,8 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const user = await getEffectiveUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!isAllowed(user.role, "assistant:access")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!isAllowed(user.role, "assistant:access"))
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   let body: { question?: unknown; locale?: unknown };
   try {
     body = (await request.json()) as { question?: unknown; locale?: unknown };

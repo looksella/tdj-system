@@ -41,6 +41,7 @@ import { redirect } from "next/navigation";
 import { at } from "@/lib/auth-textos";
 /** Nunca se prerenderiza: el sobre viaja en la query. */
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Confirmar acceso" };
 /** El `type` original del link. Decide el copy, nada más. */
 type Flujo = "invite" | "recovery" | "signup";
 function copyDe(flujo: string): { titulo: string; detalle: string; cta: string } {
@@ -109,9 +110,7 @@ export default async function ConfirmarPage({
         <form method="post" action="/auth/confirm" className="space-y-2">
           <input type="hidden" name="token_hash" value={tokenHash} />
           <input type="hidden" name="type" value={tipo} />
-          {esRutaInterna(siguiente) && (
-            <input type="hidden" name="next" value={siguiente} />
-          )}
+          {esRutaInterna(siguiente) && <input type="hidden" name="next" value={siguiente} />}
           <button
             type="submit"
             className="block w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"

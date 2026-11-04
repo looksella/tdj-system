@@ -82,35 +82,33 @@ export default async function AppleIcon() {
   const themeColor = process.env.NEXT_PUBLIC_APP_THEME_COLOR || "#0074E8";
   const logo = await logoDataUri();
   return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: themeColor,
-          color: "#ffffff",
-          fontSize: 96,
-          fontWeight: 700,
-          letterSpacing: "-0.05em",
-        }}
-      >
-        {logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logo}
-            alt=""
-            width={Math.round(180 * 0.7)}
-            height={Math.round(180 * 0.7)}
-            style={{ objectFit: "contain" }}
-          />
-        ) : (
-          initials(name)
-        )}
-      </div>
-    ),
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: themeColor,
+        color: "#ffffff",
+        fontSize: 96,
+        fontWeight: 700,
+        letterSpacing: "-0.05em",
+      }}
+    >
+      {logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logo}
+          alt=""
+          width={Math.round(180 * 0.7)}
+          height={Math.round(180 * 0.7)}
+          style={{ objectFit: "contain" }}
+        />
+      ) : (
+        initials(name)
+      )}
+    </div>,
     { ...SIZE },
   );
 }

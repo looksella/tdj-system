@@ -19,7 +19,10 @@ const RESPALDO = "prisma/data/backup";
 
 // ---------------------------------------------------------------- normalización
 const sinAcentos = (texto) =>
-  texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 
 const normalizar = (texto) =>
   sinAcentos(texto)
@@ -73,28 +76,91 @@ const CATEGORIAS_NUEVAS = ["Telefonía y Recargas", "Juguetes y Recreación"];
 // del cashbook ("Groceries", "Food", "Variedades") que mezcla snacks, panadería,
 // café y limpieza en un solo saco.
 const REGLAS = [
-  [/(tarjeta (claro|tigo|movistar|digicel)|recarga|\bsaldo\b|^chips?$|simcard)/, "Telefonía y Recargas"],
-  [/(pasta (liquida|de|para) (de )?zapatos|palitos? para chocobanano|pinchos? de bambu)/, "Accesorios y Variedades"],
-  [/(botella|bolsa|bolson|galon) (de )?agua|agua (aqua|alpina|salud|cristal|pura)|cascada|jugo|refresco|soda|salvacola|kolashampan|\bpetit\b|aloe vera|\bamp\b|coca cola|\benergy\b|gatorade|power ade|\btang\b|superjuoo|tropical|zumo|nectar|caja salud/, "Bebidas y Refrescos"],
-  [/(helado|paleta|cream pop|laky|\bcono\b|sorbete|goliat|copamia|nevecrok)/, "Helados y Postres Congelados"],
-  [/(caf[eé]|coscaf|nescaf|musun|juan vald|mokaccino|coffee mate|capuchino|cremora|chocolate abuelita|\bte de|manzanilla)/, "Café e Infusiones"],
-  [/(\bpan\b|pan de|panquecit|donit|mufin|muffin|semita|quesadilla|pastel|torta|marquezot|alemana|santaneca|poleadita|maria luisa|pinguinito|dalmata|bimboldraje|bimboletes|roles de canela|galleta de mantequilla|magdalena|magalena|concha|pichardin|hojita|cakito|orejita|arrollad|palmerit|tostada|rapidita|submarino|gansito|\bnito\b|sponch|principe|multigrano|chocochispa|panque|minibarrita)/, "Panadería y Repostería"],
-  [/(tira |tiras |zibas|gallet|oreo|pringles|papas|papasit|chips|chetos|cheetos|ranchitas|korchip|takis|churrit|popotit|anillit|palomitas|man[ií]|ma[ií]z|chicharr|platanit|yuquit|tocinit|quesito|quesitrix|kitos|taquerit|pachangamix|yummix|yumipops|yumix|turr[oó]n|dulce|chicle|trident|clorets|menta|menthoplus|halls|bonobon|chocolat|gomita|caramelo|semilla|granola|energizante|suspiro|saladito|centavit|nacho|jalape|elotito|alboroto|totis|favori|cappy|gustit|tozteca|dorito|zambo|tortrix|chocosa|mamut|margarita|frijoli|palito|barbacoa|mashmallow|granuts|tortillita|churro|pegadit|virogrip|salero|piguis|lococha|papa lays|liquiñelos?|maiz (chino|tostado|frito)|yuca|baby diana|tornito|\bpizza\b|chamoy|tropikuhl|chao mein|bimbojaldre)/, "Snacks y Dulces"],
-  [/(leche|crema(?!&)|queso duro|cuajada|mantequilla|margarina|huevo|yogur|reques[oó]n|natilla|colado)/, "Lácteos y Huevos"],
-  [/(para lavar|trastes|para ropa|cloro|lej[ií]a|detergente|suavizante|limpiador|desinfectante|escoba|trapeador|esponja|axion|azistin|fabuloso|pinol|baygon|raid|magia blanca|cera para|trapo|s[aá]bana de piso|ambientador|zagaz|orix|rinso|maxisplash|espumil|sarricida|\bcal\b)/, "Productos de Limpieza del Hogar"],
-  [/(jab[oó]n|pasta dental|cepillo|shampo|champu|acondicionador|papel higi[eé]nico|papel (scott|encanto|toalla)|toalla|desodorante|afeit|gillete|gillette|navaja|pa[nñ]al|pamper|kotex|saba|fiore|isopo|algod[oó]n|enjuague|colonias|perfume|toallita|fresa labial|aceite de beb|cortau[nñ]a)/, "Cuidado Personal e Higiene"],
-  [/(acetaminof|amoxicil|ibuprof|paracetamol|alcohol|curita|gasa|jarabe|pastilla|tableta|dolofin|dorival|sal de uvas|sueroral|suero|vitamina|blister|medicina|antiinflam|antibiotic|termometro|alka|panadol|intestinomicina)/, "Medicamentos y Farmacia"],
+  [
+    /(tarjeta (claro|tigo|movistar|digicel)|recarga|\bsaldo\b|^chips?$|simcard)/,
+    "Telefonía y Recargas",
+  ],
+  [
+    /(pasta (liquida|de|para) (de )?zapatos|palitos? para chocobanano|pinchos? de bambu)/,
+    "Accesorios y Variedades",
+  ],
+  [
+    /(botella|bolsa|bolson|galon) (de )?agua|agua (aqua|alpina|salud|cristal|pura)|cascada|jugo|refresco|soda|salvacola|kolashampan|\bpetit\b|aloe vera|\bamp\b|coca cola|\benergy\b|gatorade|power ade|\btang\b|superjuoo|tropical|zumo|nectar|caja salud/,
+    "Bebidas y Refrescos",
+  ],
+  [
+    /(helado|paleta|cream pop|laky|\bcono\b|sorbete|goliat|copamia|nevecrok)/,
+    "Helados y Postres Congelados",
+  ],
+  [
+    /(caf[eé]|coscaf|nescaf|musun|juan vald|mokaccino|coffee mate|capuchino|cremora|chocolate abuelita|\bte de|manzanilla)/,
+    "Café e Infusiones",
+  ],
+  [
+    /(\bpan\b|pan de|panquecit|donit|mufin|muffin|semita|quesadilla|pastel|torta|marquezot|alemana|santaneca|poleadita|maria luisa|pinguinito|dalmata|bimboldraje|bimboletes|roles de canela|galleta de mantequilla|magdalena|magalena|concha|pichardin|hojita|cakito|orejita|arrollad|palmerit|tostada|rapidita|submarino|gansito|\bnito\b|sponch|principe|multigrano|chocochispa|panque|minibarrita)/,
+    "Panadería y Repostería",
+  ],
+  [
+    /(tira |tiras |zibas|gallet|oreo|pringles|papas|papasit|chips|chetos|cheetos|ranchitas|korchip|takis|churrit|popotit|anillit|palomitas|man[ií]|ma[ií]z|chicharr|platanit|yuquit|tocinit|quesito|quesitrix|kitos|taquerit|pachangamix|yummix|yumipops|yumix|turr[oó]n|dulce|chicle|trident|clorets|menta|menthoplus|halls|bonobon|chocolat|gomita|caramelo|semilla|granola|energizante|suspiro|saladito|centavit|nacho|jalape|elotito|alboroto|totis|favori|cappy|gustit|tozteca|dorito|zambo|tortrix|chocosa|mamut|margarita|frijoli|palito|barbacoa|mashmallow|granuts|tortillita|churro|pegadit|virogrip|salero|piguis|lococha|papa lays|liquiñelos?|maiz (chino|tostado|frito)|yuca|baby diana|tornito|\bpizza\b|chamoy|tropikuhl|chao mein|bimbojaldre)/,
+    "Snacks y Dulces",
+  ],
+  [
+    /(leche|crema(?!&)|queso duro|cuajada|mantequilla|margarina|huevo|yogur|reques[oó]n|natilla|colado)/,
+    "Lácteos y Huevos",
+  ],
+  [
+    /(para lavar|trastes|para ropa|cloro|lej[ií]a|detergente|suavizante|limpiador|desinfectante|escoba|trapeador|esponja|axion|azistin|fabuloso|pinol|baygon|raid|magia blanca|cera para|trapo|s[aá]bana de piso|ambientador|zagaz|orix|rinso|maxisplash|espumil|sarricida|\bcal\b)/,
+    "Productos de Limpieza del Hogar",
+  ],
+  [
+    /(jab[oó]n|pasta dental|cepillo|shampo|champu|acondicionador|papel higi[eé]nico|papel (scott|encanto|toalla)|toalla|desodorante|afeit|gillete|gillette|navaja|pa[nñ]al|pamper|kotex|saba|fiore|isopo|algod[oó]n|enjuague|colonias|perfume|toallita|fresa labial|aceite de beb|cortau[nñ]a)/,
+    "Cuidado Personal e Higiene",
+  ],
+  [
+    /(acetaminof|amoxicil|ibuprof|paracetamol|alcohol|curita|gasa|jarabe|pastilla|tableta|dolofin|dorival|sal de uvas|sueroral|suero|vitamina|blister|medicina|antiinflam|antibiotic|termometro|alka|panadol|intestinomicina)/,
+    "Medicamentos y Farmacia",
+  ],
   [/(at[uú]n|sardina|ensalada campesina|en lata|conserva|chile en)/, "Enlatados y Conservas"],
-  [/(vaso|plato|tenedor|cuchara|cuchillo|servilleta|pajilla|bolsa gabacha|contenedor|bandeja|desechable|charola|tapa para|bolsa de basura|bolsa jardin)/, "Artículos Desechables"],
-  [/(juguete|pelota|mu[nñ]eca|carrito|globo|yoy[oó]|rompecabezas|peluche|set de)/, "Juguetes y Recreación"],
-  [/(cuaderno|l[aá]piz|lapicero|bol[ií]grafo|marcador|cray[oó]n|folder|papel bond|papel de color|sacapuntas|\bregla\b|tijera|pegamento|pega |silicon|resma|agenda|calendario|sobres? para|sobre feliz|aritos|\bcola\b|colores pointer|l[aá]pices de color)/, "Papelería y Material Escolar"],
-  [/(bater[ií]a|pila|foco|cable|cargador|aud[ií]fono|\bcontrol\b|linterna|extensi[oó]n|adaptador|radio)/, "Electrónicos y Baterías"],
-  [/(arroz|frijol|az[uú]car|aceite|harina|maicena|maizena|pasta (fama|de tomate|para)|espagueti|fideo|macarr[oó]n|avena|lenteja|garbanzo|manteca|\bsopa\b|gelatina)/, "Alimentos Básicos y Granos"],
-  [/\bsal\b|pimienta|comino|canela|or[eé]gano|laurel|achiote|consom|salsa|maggi|chile jalisco|condimento|caldo|vinagre|flor de jamaica|azafr[aá]n|curry|mostaza|mayonesa|ketchup|miel|vainilla|relajo|empanizador|ablandador|\bajo\b|tomillo/, "Condimentos y Especias"],
-  [/(tomate|cebolla|\bpapa\b|zanahoria|\blim[oó]n\b|pl[aá]tano|banano|manzana|\bnaranja\b|aguacate|g[uü]isquil|elote|sand[ií]a|mel[oó]n|pi[nñ]a|pepino|chile verde|lechuga|repollo)/, "Frutas y Verduras"],
-  [/(cereal|barra de|zucarita|chocokrispi|froot|kellogs|avena instant)/, "Cereales y Barras de Desayuno"],
-  [/(candela|vela|f[oó]sforo|encendedor|guacal|huacal|cuerda|lazo|hilo|aguja|colador|cuchar[oó]n|recipiente|tostador|olla|peine|gancho|bolsa de|papel aluminio|bicarbonato|carb[oó]n|hules|lima para|monedero|\bcal\b)/, "Accesorios y Variedades"],
-  [/(crema|brillantina|maquillaje|labial|esmalte|rubor|delineador)/, "Productos de Belleza y Cosmética"],
+  [
+    /(vaso|plato|tenedor|cuchara|cuchillo|servilleta|pajilla|bolsa gabacha|contenedor|bandeja|desechable|charola|tapa para|bolsa de basura|bolsa jardin)/,
+    "Artículos Desechables",
+  ],
+  [
+    /(juguete|pelota|mu[nñ]eca|carrito|globo|yoy[oó]|rompecabezas|peluche|set de)/,
+    "Juguetes y Recreación",
+  ],
+  [
+    /(cuaderno|l[aá]piz|lapicero|bol[ií]grafo|marcador|cray[oó]n|folder|papel bond|papel de color|sacapuntas|\bregla\b|tijera|pegamento|pega |silicon|resma|agenda|calendario|sobres? para|sobre feliz|aritos|\bcola\b|colores pointer|l[aá]pices de color)/,
+    "Papelería y Material Escolar",
+  ],
+  [
+    /(bater[ií]a|pila|foco|cable|cargador|aud[ií]fono|\bcontrol\b|linterna|extensi[oó]n|adaptador|radio)/,
+    "Electrónicos y Baterías",
+  ],
+  [
+    /(arroz|frijol|az[uú]car|aceite|harina|maicena|maizena|pasta (fama|de tomate|para)|espagueti|fideo|macarr[oó]n|avena|lenteja|garbanzo|manteca|\bsopa\b|gelatina)/,
+    "Alimentos Básicos y Granos",
+  ],
+  [
+    /\bsal\b|pimienta|comino|canela|or[eé]gano|laurel|achiote|consom|salsa|maggi|chile jalisco|condimento|caldo|vinagre|flor de jamaica|azafr[aá]n|curry|mostaza|mayonesa|ketchup|miel|vainilla|relajo|empanizador|ablandador|\bajo\b|tomillo/,
+    "Condimentos y Especias",
+  ],
+  [
+    /(tomate|cebolla|\bpapa\b|zanahoria|\blim[oó]n\b|pl[aá]tano|banano|manzana|\bnaranja\b|aguacate|g[uü]isquil|elote|sand[ií]a|mel[oó]n|pi[nñ]a|pepino|chile verde|lechuga|repollo)/,
+    "Frutas y Verduras",
+  ],
+  [
+    /(cereal|barra de|zucarita|chocokrispi|froot|kellogs|avena instant)/,
+    "Cereales y Barras de Desayuno",
+  ],
+  [
+    /(candela|vela|f[oó]sforo|encendedor|guacal|huacal|cuerda|lazo|hilo|aguja|colador|cuchar[oó]n|recipiente|tostador|olla|peine|gancho|bolsa de|papel aluminio|bicarbonato|carb[oó]n|hules|lima para|monedero|\bcal\b)/,
+    "Accesorios y Variedades",
+  ],
+  [
+    /(crema|brillantina|maquillaje|labial|esmalte|rubor|delineador)/,
+    "Productos de Belleza y Cosmética",
+  ],
 ];
 
 const PREFIJOS = {
@@ -140,8 +206,18 @@ function tamanos(nombre) {
   const grupos = new Map();
   for (const texto of encontrados) {
     const [, valor, unidad] = /^(\d+(?:\.\d+)?)(ml|lt|l|kg|gr|g|oz|lbs?)$/.exec(texto);
-    const gramos = unidad === "kg" ? Number(valor) * 1000 : unidad === "gr" || unidad === "g" ? Number(valor) : null;
-    const mililitros = unidad === "lt" || unidad === "l" ? Number(valor) * 1000 : unidad === "ml" ? Number(valor) : null;
+    const gramos =
+      unidad === "kg"
+        ? Number(valor) * 1000
+        : unidad === "gr" || unidad === "g"
+          ? Number(valor)
+          : null;
+    const mililitros =
+      unidad === "lt" || unidad === "l"
+        ? Number(valor) * 1000
+        : unidad === "ml"
+          ? Number(valor)
+          : null;
     const libras = unidad.startsWith("lb") ? Number(valor) : null;
     if (gramos !== null) grupos.set("g", (grupos.get("g") ?? []).concat(gramos));
     else if (mililitros !== null) grupos.set("ml", (grupos.get("ml") ?? []).concat(mililitros));
@@ -154,7 +230,8 @@ function tamanos(nombre) {
 function mismoTamano(a, b) {
   for (const [unidad, valores] of tamanos(a)) {
     const otros = tamanos(b).get(unidad);
-    if (otros && otros.length && valores.length && otros.join(",") !== valores.join(",")) return false;
+    if (otros && otros.length && valores.length && otros.join(",") !== valores.join(","))
+      return false;
   }
   return true;
 }
@@ -188,7 +265,9 @@ const mnemonicode = (nombre) => {
 };
 
 // ------------------------------------------------------------------ lectura
-const filas = readSheets(rutaPlanilla)[0].rows.slice(8).filter((fila) => fila[1]);
+const filas = readSheets(rutaPlanilla)[0]
+  .rows.slice(8)
+  .filter((fila) => fila[1]);
 const ingresos = filas.filter((fila) => Number(fila[5]) > 0);
 const mesesDelPeriodo = new Set(ingresos.map((fila) => mesDe(fila[0]) ?? fila[0])).size || 1;
 
@@ -229,7 +308,15 @@ const prisma = new PrismaClient();
 const categoriasDb = await prisma.categoria.findMany({ select: { id: true, categoryName: true } });
 const categoriaPorNombre = new Map(categoriasDb.map((c) => [c.categoryName, c]));
 const productosDb = await prisma.producto.findMany({
-  select: { id: true, sku: true, name: true, salePrice: true, currentStock: true, categoryId: true, isActive: true },
+  select: {
+    id: true,
+    sku: true,
+    name: true,
+    salePrice: true,
+    currentStock: true,
+    categoryId: true,
+    isActive: true,
+  },
 });
 
 const porNombre = new Map();
@@ -291,7 +378,9 @@ const obsoletos = productosDb.filter((p) => !idsCoincidentes.has(p.id));
 
 // ------------------------------------------------------------------- respaldo
 const csv = (filasCsv) =>
-  filasCsv.map((fila) => fila.map((valor) => `"${String(valor ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  filasCsv
+    .map((fila) => fila.map((valor) => `"${String(valor ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
 
 mkdirSync(RESPALDO, { recursive: true });
 // El respaldo se escribe una sola vez por día: si ya existe, es el catálogo
@@ -302,7 +391,15 @@ if (!existsSync(rutaRespaldo)) {
     rutaRespaldo,
     csv([
       ["id", "sku", "name", "sale_price", "current_stock", "category_id", "is_active"],
-      ...productosDb.map((p) => [p.id, p.sku, p.name, p.salePrice, p.currentStock, p.categoryId, p.isActive]),
+      ...productosDb.map((p) => [
+        p.id,
+        p.sku,
+        p.name,
+        p.salePrice,
+        p.currentStock,
+        p.categoryId,
+        p.isActive,
+      ]),
     ]),
   );
 }
@@ -311,12 +408,14 @@ writeFileSync(
   csv([["category_name"], ...categoriasDb.map((c) => [c.categoryName])]),
 );
 
-const categoriasFaltantes = [...new Set([...coincidencias, ...nuevos].map((i) => i.categoria))].filter(
-  (nombre) => !categoriaPorNombre.has(nombre),
-);
+const categoriasFaltantes = [
+  ...new Set([...coincidencias, ...nuevos].map((i) => i.categoria)),
+].filter((nombre) => !categoriaPorNombre.has(nombre));
 
 console.log(`Planilla: ${rutaPlanilla.split(/[\\/]/).pop()}`);
-console.log(`Ventas leídas: ${ingresos.length} líneas · ${articulos.size} artículos distintos · meses ${mesesDelPeriodo}`);
+console.log(
+  `Ventas leídas: ${ingresos.length} líneas · ${articulos.size} artículos distintos · meses ${mesesDelPeriodo}`,
+);
 console.log(`Emparejados con el catálogo: ${coincidencias.length}`);
 console.log(`Artículos nuevos: ${nuevos.length}`);
 console.log(`Productos del catálogo sin ninguna venta (se desactivan): ${obsoletos.length}`);
@@ -339,7 +438,16 @@ if (unificados.length) {
 writeFileSync(
   `${RESPALDO}/reconciliacion-${HOY}.csv`,
   csv([
-    ["accion", "nombre", "categoria", "ventas", "unidades", "ingreso", "precio_unitario", "sku_o_motivo"],
+    [
+      "accion",
+      "nombre",
+      "categoria",
+      "ventas",
+      "unidades",
+      "ingreso",
+      "precio_unitario",
+      "sku_o_motivo",
+    ],
     ...coincidencias.map((c) => [
       Number(c.precioModal) !== Number(c.producto.salePrice) ? "precio actualizado" : "ya existía",
       c.producto.name,
@@ -360,7 +468,16 @@ writeFileSync(
       n.precioModal.toFixed(2),
       "sin coincidencia en el catálogo",
     ]),
-    ...obsoletos.map((p) => ["desactivado", p.name, "", 0, 0, 0, Number(p.salePrice).toFixed(2), "sin ventas en el período"]),
+    ...obsoletos.map((p) => [
+      "desactivado",
+      p.name,
+      "",
+      0,
+      0,
+      0,
+      Number(p.salePrice).toFixed(2),
+      "sin ventas en el período",
+    ]),
   ]),
 );
 
@@ -378,7 +495,9 @@ for (const nombre of categoriasFaltantes) {
   await prisma.categoria.create({ data: { categoryName: nombre } });
   console.log(`+ categoría ${nombre}`);
 }
-const categoriasActuales = await prisma.categoria.findMany({ select: { id: true, categoryName: true } });
+const categoriasActuales = await prisma.categoria.findMany({
+  select: { id: true, categoryName: true },
+});
 const idCategoria = new Map(categoriasActuales.map((c) => [c.categoryName, c.id]));
 
 // Varias entradas del libro de caja pueden apuntar al mismo producto: manda la
@@ -496,7 +615,9 @@ await prisma.categoria.updateMany({
 });
 
 const totalIngresos = [...metricas.values()].reduce((suma, m) => suma + m.ingreso, 0);
-console.log(`\nAplicado: ${nuevosConSku.length} productos nuevos, ${preciosCambiados.length} precios actualizados, ${obsoletos.length} desactivados.`);
+console.log(
+  `\nAplicado: ${nuevosConSku.length} productos nuevos, ${preciosCambiados.length} precios actualizados, ${obsoletos.length} desactivados.`,
+);
 console.log(`Ingresos del período cargados en las categorías: $${totalIngresos.toFixed(2)}`);
 console.log(`Respaldo del catálogo anterior: ${RESPALDO}/productos-${HOY}.csv`);
 await prisma.$disconnect();

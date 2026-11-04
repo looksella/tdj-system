@@ -18,10 +18,7 @@ export interface ArchivoEntrada {
   base64: string;
 }
 export type ErrorIA =
-  | "insufficient_credits"
-  | "daily_ai_cap_reached"
-  | "archivo_ilegible"
-  | "error";
+  "insufficient_credits" | "daily_ai_cap_reached" | "archivo_ilegible" | "error";
 export type ResultadoExtraccion =
   | {
       ok: true;
@@ -33,18 +30,11 @@ export type ResultadoExtraccion =
     }
   | { ok: false; code: ErrorIA; message: string };
 export type ResultadoPregunta =
-  | { ok: true; texto?: string; datos?: unknown }
-  | { ok: false; code: ErrorIA; message: string };
+  { ok: true; texto?: string; datos?: unknown } | { ok: false; code: ErrorIA; message: string };
 /** Tope por archivo. Vercel corta el body de una función en 4,5 MB. */
 export const MAX_BYTES_POR_ARCHIVO = 4 * 1024 * 1024;
 export const MAX_ARCHIVOS = 3;
-const TIPOS_ACEPTADOS = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "application/pdf",
-];
+const TIPOS_ACEPTADOS = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
 /** Env vars leídas al llamar, no al cargar el módulo: el App Router las
  *  resuelve por request y a nivel módulo pueden ser undefined. */
 function proxy(): { url: string; key: string } | null {
@@ -167,9 +157,7 @@ function descripcionDeCampos(campos: Campo[], sangria = ""): string {
 async function llamarProxy(
   helper: "extraer" | "preguntar",
   cuerpo: Record<string, unknown>,
-): Promise<
-  { ok: true; texto: string } | { ok: false; code: ErrorIA; message: string }
-> {
+): Promise<{ ok: true; texto: string } | { ok: false; code: ErrorIA; message: string }> {
   const p = proxy();
   if (!p) {
     return { ok: false, code: "error", message: "La IA no está configurada en este sistema." };
@@ -188,7 +176,11 @@ async function llamarProxy(
       cache: "no-store",
     });
   } catch {
-    return { ok: false, code: "error", message: "No pudimos usar la IA. Probá de nuevo en un momento." };
+    return {
+      ok: false,
+      code: "error",
+      message: "No pudimos usar la IA. Probá de nuevo en un momento.",
+    };
   }
   if (res.status === 402) {
     return {
@@ -205,13 +197,21 @@ async function llamarProxy(
     };
   }
   if (!res.ok) {
-    return { ok: false, code: "error", message: "No pudimos usar la IA. Probá de nuevo en un momento." };
+    return {
+      ok: false,
+      code: "error",
+      message: "No pudimos usar la IA. Probá de nuevo en un momento.",
+    };
   }
   let body: { result?: { choices?: Array<{ message?: { content?: string } }> } };
   try {
     body = (await res.json()) as typeof body;
   } catch {
-    return { ok: false, code: "error", message: "No pudimos usar la IA. Probá de nuevo en un momento." };
+    return {
+      ok: false,
+      code: "error",
+      message: "No pudimos usar la IA. Probá de nuevo en un momento.",
+    };
   }
   const texto = body.result?.choices?.[0]?.message?.content ?? "";
   if (!texto) {
@@ -279,7 +279,8 @@ export async function extraerDatos(input: {
       message: "No pude leer este archivo. Probá con otra foto o con el PDF original.",
     };
   }
-  const confianza = leido.confianza === "alta" || leido.confianza === "baja" ? leido.confianza : "media";
+  const confianza =
+    leido.confianza === "alta" || leido.confianza === "baja" ? leido.confianza : "media";
   return {
     ok: true,
     datos: leido.datos ?? {},

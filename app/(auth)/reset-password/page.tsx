@@ -68,9 +68,7 @@ export default function ResetPasswordPage() {
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
       <h1 className="text-2xl font-bold text-center">{at.reset.titulo}</h1>
-      <p className="text-center text-sm text-muted-foreground">
-        {at.reset.bajada}
-      </p>
+      <p className="text-center text-sm text-muted-foreground">{at.reset.bajada}</p>
       <div className="space-y-2">
         <label htmlFor="password" className="text-sm font-medium">
           {at.reset.label}

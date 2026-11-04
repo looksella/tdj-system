@@ -69,7 +69,12 @@ function aFecha(valor: Date | string): string {
 async function sinSincronizar(res: Response): Promise<ResultadoSincronizacion> {
   const d = await detalle(res);
   if (res.status === 409) {
-    return { synced: false, reason: "not_connected", message: d.message, connectUrl: d.connect_url };
+    return {
+      synced: false,
+      reason: "not_connected",
+      message: d.message,
+      connectUrl: d.connect_url,
+    };
   }
   if (res.status === 503) return { synced: false, reason: "disabled", message: d.message };
   return { synced: false, reason: "error", message: d.message || `Google Calendar ${res.status}` };
@@ -81,18 +86,27 @@ export async function estadoCalendario(): Promise<EstadoCalendario> {
   try {
     res = await llamar("status", {});
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Beon Tools no configurado")) throw error;
+    if (error instanceof Error && error.message.startsWith("Beon Tools no configurado"))
+      throw error;
     return { status: "disabled" };
   }
   if (!res.ok) return { status: "disabled" };
-  const body = (await res.json()) as { status?: string; account?: string | null; connect_url?: string | null };
-  if (body.status === "connected") return { status: "connected", account: body.account ?? undefined };
-  if (body.status === "disconnected") return { status: "disconnected", connectUrl: body.connect_url ?? undefined };
+  const body = (await res.json()) as {
+    status?: string;
+    account?: string | null;
+    connect_url?: string | null;
+  };
+  if (body.status === "connected")
+    return { status: "connected", account: body.account ?? undefined };
+  if (body.status === "disconnected")
+    return { status: "disconnected", connectUrl: body.connect_url ?? undefined };
   return { status: "disabled" };
 }
 /** Crea o mueve el evento del turno en el Google Calendar del dueño. Guardá
  *  `googleEventId` en el turno para poder reprogramarlo o cancelarlo. */
-export async function sincronizarTurno(turno: TurnoParaCalendario): Promise<ResultadoSincronizacion> {
+export async function sincronizarTurno(
+  turno: TurnoParaCalendario,
+): Promise<ResultadoSincronizacion> {
   let res: Response;
   try {
     res = await llamar("upsert", {
@@ -106,11 +120,20 @@ export async function sincronizarTurno(turno: TurnoParaCalendario): Promise<Resu
       ...(turno.googleEventId ? { google_event_id: turno.googleEventId } : {}),
     });
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Beon Tools no configurado")) throw error;
-    return { synced: false, reason: "error", message: "No se pudo contactar al servicio de calendario." };
+    if (error instanceof Error && error.message.startsWith("Beon Tools no configurado"))
+      throw error;
+    return {
+      synced: false,
+      reason: "error",
+      message: "No se pudo contactar al servicio de calendario.",
+    };
   }
   if (!res.ok) return sinSincronizar(res);
-  const body = (await res.json()) as { google_event_id: string; html_link?: string | null; meet_link?: string | null };
+  const body = (await res.json()) as {
+    google_event_id: string;
+    html_link?: string | null;
+    meet_link?: string | null;
+  };
   return {
     synced: true,
     googleEventId: body.google_event_id,
@@ -120,12 +143,15 @@ export async function sincronizarTurno(turno: TurnoParaCalendario): Promise<Resu
 }
 /** Borra el evento del turno (avisa a los invitados). Un evento que ya no
  *  existe en Google cuenta como borrado. */
-export async function cancelarTurno(googleEventId: string): Promise<{ synced: boolean; reason?: string }> {
+export async function cancelarTurno(
+  googleEventId: string,
+): Promise<{ synced: boolean; reason?: string }> {
   let res: Response;
   try {
     res = await llamar("cancel", { google_event_id: googleEventId });
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Beon Tools no configurado")) throw error;
+    if (error instanceof Error && error.message.startsWith("Beon Tools no configurado"))
+      throw error;
     return { synced: false, reason: "error" };
   }
   if (!res.ok) {

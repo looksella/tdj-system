@@ -3,6 +3,7 @@ import { at } from "@/lib/auth-textos";
 import { INVITABLE_ROLES } from "@/lib/auth-helpers";
 import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Usuarios del equipo" };
 /**
  * User management — administrator and developer roles only.
  *
@@ -19,9 +20,7 @@ export default async function UsuariosPage() {
     <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold">{at.usuarios.tituloPagina}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {at.usuarios.bajadaPagina}
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{at.usuarios.bajadaPagina}</p>
       </div>
       <UsuariosPanel roles={[...INVITABLE_ROLES]} />
     </div>

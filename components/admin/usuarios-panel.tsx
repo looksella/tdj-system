@@ -89,11 +89,7 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
         setAviso(at.usuarios.invitacionEnviada);
       } else {
         setInviteLink(data.inviteLink);
-        setLinkNota(
-          method === "link"
-            ? at.usuarios.linkNota24h
-            : at.usuarios.rateLimitLink,
-        );
+        setLinkNota(method === "link" ? at.usuarios.linkNota24h : at.usuarios.rateLimitLink);
       }
       setEmail("");
       void cargar();
@@ -198,17 +194,13 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
             {enviando ? at.usuarios.invitando : at.usuarios.invitar}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {at.usuarios.ayudaInvitar}
-        </p>
+        <p className="text-xs text-muted-foreground">{at.usuarios.ayudaInvitar}</p>
         {error && <p className="text-sm text-red-500">{error}</p>}
         {aviso && <p className="text-sm text-green-600">{aviso}</p>}
         {/* Se copió el link de alguien de la lista: no hay caja de link a la
             vista, así que el recordatorio de cómo mandarlo va acá. */}
         {!inviteLink && aviso === at.usuarios.linkCopiado && (
-          <p className="text-xs text-muted-foreground">
-            {at.usuarios.avisoCompartirLink}
-          </p>
+          <p className="text-xs text-muted-foreground">{at.usuarios.avisoCompartirLink}</p>
         )}
         {inviteLink && (
           <div className="space-y-2">
@@ -229,12 +221,8 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
                 {at.usuarios.copiar}
               </button>
             </div>
-            {linkNota && (
-              <p className="text-xs text-muted-foreground">{linkNota}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {at.usuarios.avisoCompartirLink}
-            </p>
+            {linkNota && <p className="text-xs text-muted-foreground">{linkNota}</p>}
+            <p className="text-xs text-muted-foreground">{at.usuarios.avisoCompartirLink}</p>
           </div>
         )}
       </form>
@@ -243,9 +231,7 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
         {cargando ? (
           <p className="text-sm text-muted-foreground">{at.comun.cargando}</p>
         ) : usuarios.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {at.usuarios.sinUsuarios}
-          </p>
+          <p className="text-sm text-muted-foreground">{at.usuarios.sinUsuarios}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
@@ -264,9 +250,7 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
                     <td className="px-3 py-2">{u.email}</td>
                     <td className="px-3 py-2">{etiquetaRol(u.role)}</td>
                     <td className="px-3 py-2">{ETIQUETA[u.estado]}</td>
-                    <td className="px-3 py-2">
-                      {new Date(u.created_at).toLocaleDateString()}
-                    </td>
+                    <td className="px-3 py-2">{new Date(u.created_at).toLocaleDateString()}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex flex-wrap justify-end gap-2">
                         {u.role !== "developer" && u.estado !== "activo" && (
@@ -280,13 +264,19 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
                               : at.usuarios.reenviarLink}
                           </button>
                         )}
-                        {u.role !== "developer" ? <button
-                          type="button"
-                          onClick={() => abrirBaja(u)}
-                          className="rounded-md border px-2 py-1 text-xs font-medium"
-                        >
-                          {at.usuarios.quitar}
-                        </button> : <span className="text-xs text-muted-foreground">{at.usuarios.rolProtegido}</span>}
+                        {u.role !== "developer" ? (
+                          <button
+                            type="button"
+                            onClick={() => abrirBaja(u)}
+                            className="rounded-md border px-2 py-1 text-xs font-medium"
+                          >
+                            {at.usuarios.quitar}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {at.usuarios.rolProtegido}
+                          </span>
+                        )}
                       </div>
                       {quitando === u.id && (
                         <div className="mt-2 space-y-2 text-left">
@@ -303,9 +293,7 @@ export function UsuariosPanel({ roles }: { roles: string[] }) {
                             />
                             <button
                               type="button"
-                              disabled={
-                                !u.email || confirmacion.trim() !== u.email
-                              }
+                              disabled={!u.email || confirmacion.trim() !== u.email}
                               onClick={() => void quitar(u)}
                               className="rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50"
                             >

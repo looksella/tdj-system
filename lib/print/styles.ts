@@ -12,9 +12,7 @@
  */
 import type { FormatoImpresion } from "./config";
 function sizeDeclaracion(f: FormatoImpresion): string {
-  return f.altoMm === "auto"
-    ? `${f.anchoMm}mm auto`
-    : `${f.anchoMm}mm ${f.altoMm}mm`;
+  return f.altoMm === "auto" ? `${f.anchoMm}mm auto` : `${f.anchoMm}mm ${f.altoMm}mm`;
 }
 /** Base común a las tres familias. */
 function base(f: FormatoImpresion): string {

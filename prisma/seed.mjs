@@ -32,37 +32,51 @@ function readCsv(path) {
     records.push(row);
   }
   const [headers, ...values] = records;
-  return values.map((valuesRow) => Object.fromEntries(headers.map((header, index) => [header, valuesRow[index] ?? ""])));
+  return values.map((valuesRow) =>
+    Object.fromEntries(headers.map((header, index) => [header, valuesRow[index] ?? ""])),
+  );
 }
-const nullable = (value) => value ? value : null;
+const nullable = (value) => (value ? value : null);
 const dateOrNull = (value) => {
   if (!value) return null;
   const normalized = value.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
   const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 };
+const scheduleTime = (value) => new Date(`1970-01-01T${value}:00.000Z`);
 try {
-  if (await prisma.categoria.count() === 0) {
-    const categories = readCsv("./data/categorias.csv").map((row) => ({
-      id: row.category_id,
-      categoryName: row.category_name,
-      itemsSold: Number(row.items_sold),
-      totalQuantitySold: Number(row.total_quantity_sold),
-      totalRevenue: row.total_revenue,
-    })).filter((row) => row.id && row.categoryName && Number.isFinite(row.itemsSold));
+  if ((await prisma.categoria.count()) === 0) {
+    const categories = readCsv("./data/categorias.csv")
+      .map((row) => ({
+        id: row.category_id,
+        categoryName: row.category_name,
+        itemsSold: Number(row.items_sold),
+        totalQuantitySold: Number(row.total_quantity_sold),
+        totalRevenue: row.total_revenue,
+      }))
+      .filter((row) => row.id && row.categoryName && Number.isFinite(row.itemsSold));
     await prisma.categoria.createMany({ data: categories });
     console.log(`Categorías reales cargadas: ${categories.length}`);
   } else {
     console.log("Categorías: ya hay datos — skip seed");
   }
-  if (await prisma.producto.count() === 0) {
-    const categoryIds = new Set((await prisma.categoria.findMany({ select: { id: true } })).map((row) => row.id));
+  if ((await prisma.producto.count()) === 0) {
+    const categoryIds = new Set(
+      (await prisma.categoria.findMany({ select: { id: true } })).map((row) => row.id),
+    );
     const rows = readCsv("./data/productos.csv").slice(0, 500);
     const products = [];
     for (const row of rows) {
-      const valid = row.id && row.sku && row.name && Number.isFinite(Number(row.sale_price)) && Number.isInteger(Number(row.current_stock));
+      const valid =
+        row.id &&
+        row.sku &&
+        row.name &&
+        Number.isFinite(Number(row.sale_price)) &&
+        Number.isInteger(Number(row.current_stock));
       if (!valid || (row.category_id && !categoryIds.has(row.category_id))) {
-        console.log(`Producto omitido por datos incompletos o categoría inexistente: ${row.sku || "sin código"}`);
+        console.log(
+          `Producto omitido por datos incompletos o categoría inexistente: ${row.sku || "sin código"}`,
+        );
         continue;
       }
       products.push({
@@ -91,6 +105,58 @@ try {
   } else {
     console.log("Productos: ya hay datos — skip seed");
   }
+  const [dayShift, nightShift] = await Promise.all([
+    prisma.shift.upsert({
+      where: { name: "Diurno" },
+      create: {
+        name: "Diurno",
+        startTime: scheduleTime("08:00"),
+        endTime: scheduleTime("17:00"),
+        breakDurationMinutes: 60,
+      },
+      update: {},
+    }),
+    prisma.shift.upsert({
+      where: { name: "Nocturno" },
+      create: {
+        name: "Nocturno",
+        startTime: scheduleTime("19:00"),
+        endTime: scheduleTime("03:00"),
+        breakDurationMinutes: 60,
+      },
+      update: {},
+    }),
+  ]);
+  const [fiveByTwo, weekAB] = await Promise.all([
+    prisma.shiftPattern.upsert({
+      where: { name: "Rotativo 5x2 diurno" },
+      create: { name: "Rotativo 5x2 diurno", cycleDays: 7 },
+      update: {},
+    }),
+    prisma.shiftPattern.upsert({
+      where: { name: "Semana A/B diurna y nocturna" },
+      create: { name: "Semana A/B diurna y nocturna", cycleDays: 14 },
+      update: {},
+    }),
+  ]);
+  await prisma.shiftPatternDetail.createMany({
+    data: [
+      ...Array.from({ length: 7 }, (_, index) => ({
+        patternId: fiveByTwo.id,
+        daySequence: index + 1,
+        shiftId: index < 5 ? dayShift.id : null,
+        isRestDay: index >= 5,
+      })),
+      ...Array.from({ length: 14 }, (_, index) => ({
+        patternId: weekAB.id,
+        daySequence: index + 1,
+        shiftId: index < 5 ? dayShift.id : index >= 7 && index < 12 ? nightShift.id : null,
+        isRestDay: index === 5 || index === 6 || index === 12 || index === 13,
+      })),
+    ],
+    skipDuplicates: true,
+  });
+  console.log("Plantillas de turnos rotativos: verificadas");
 } finally {
   await prisma.$disconnect();
 }

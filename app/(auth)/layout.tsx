@@ -3,6 +3,9 @@
  * Las pantallas de auth se ven cuando NO hay sesión, así que un guard acá
  * dejaría al usuario sin poder llegar al login.
  */
+// Next can attach the per-request CSP nonce only to dynamically rendered HTML.
+export const dynamic = "force-dynamic";
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">

@@ -1,9 +1,7 @@
 // Web App Manifest for installable PWA support.
 import type { MetadataRoute } from "next";
 /** Trims the short name at word boundaries for the home-screen label. */
-const CONECTORES = [
-  "de", "del", "la", "el", "los", "las", "y", "a", "en", "con", "para",
-];
+const CONECTORES = ["de", "del", "la", "el", "los", "las", "y", "a", "en", "con", "para"];
 const ARTICULOS = ["mi", "mis", "el", "la", "los", "las", "un", "una"];
 function shortenName(name: string, limit = 12): string {
   if (name.length <= limit) return name;
@@ -59,8 +57,7 @@ function versionDelIcono(): string {
 }
 export default function manifest(): MetadataRoute.Manifest {
   const name = process.env.NEXT_PUBLIC_APP_NAME || "Mi sistema";
-  const shortName =
-    process.env.NEXT_PUBLIC_APP_SHORT_NAME || shortenName(name);
+  const shortName = process.env.NEXT_PUBLIC_APP_SHORT_NAME || shortenName(name);
   const themeColor = process.env.NEXT_PUBLIC_APP_THEME_COLOR || "#0074E8";
   const version = versionDelIcono();
   return {

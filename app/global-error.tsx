@@ -12,11 +12,7 @@ const COPY = {
     detalle: "Já estamos cientes. Tente recarregar em alguns segundos.",
   },
 };
-export default function GlobalError({
-  error,
-}: {
-  error: Error & { digest?: string };
-}) {
+export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   const idioma: "es" | "pt" = idiomaDelNegocio();
   const copy = COPY[idioma];
   useEffect(() => {

@@ -9,10 +9,16 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const user = await getEffectiveUser();
   if (!user) {
-    return NextResponse.json({ ok: false, code: "unauthorized", message: "Inicia sesión para continuar." }, { status: 401 });
+    return NextResponse.json(
+      { ok: false, code: "unauthorized", message: "Inicia sesión para continuar." },
+      { status: 401 },
+    );
   }
   if (!isAllowed(user.role, "assistant:access")) {
-    return NextResponse.json({ ok: false, code: "forbidden", message: "No tienes permiso para usar esta función." }, { status: 403 });
+    return NextResponse.json(
+      { ok: false, code: "forbidden", message: "No tienes permiso para usar esta función." },
+      { status: 403 },
+    );
   }
   let body: {
     archivos?: ArchivoEntrada[];

@@ -14,18 +14,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { formatDateTime, formatMoney } from "@/lib/locale";
 import { requirePagePermission } from "@/lib/require-page-permission";
+import { rangoDelDia } from "@/lib/turno";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Inicio" };
 
 export default async function HomePage() {
   await requirePagePermission("dashboard:read");
-  const offset = 6 * 60 * 60 * 1000;
-  const localNow = new Date(Date.now() - offset);
-  localNow.setUTCHours(0, 0, 0, 0);
-  const startOfDay = new Date(localNow.getTime() + offset);
+  const { start: startOfDay } = rangoDelDia();
   const [productCount, lowStock, salesToday, categories, recentSales] = await Promise.all([
     db.producto.count({ where: { isActive: true } }),
-    db.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(*)::bigint AS count FROM productos WHERE is_active = true AND current_stock <= min_stock`,
+    db.$queryRaw<
+      Array<{ count: bigint }>
+    >`SELECT COUNT(*)::bigint AS count FROM productos WHERE is_active = true AND current_stock <= min_stock`,
     db.venta.aggregate({
       where: {
         soldAt: { gte: startOfDay },
@@ -60,24 +61,50 @@ export default async function HomePage() {
           Consulta tus productos, registra una venta y mantén tus existencias al día.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Button asChild className="h-12 rounded-xl bg-white px-5 font-bold text-primary hover:bg-white/90">
-            <Link href="/ventas">Abrir punto de venta <ShoppingCart /></Link>
+          <Button
+            asChild
+            className="h-12 rounded-xl bg-white px-5 font-bold text-primary hover:bg-white/90"
+          >
+            <Link href="/ventas">
+              Abrir punto de venta <ShoppingCart />
+            </Link>
           </Button>
-          <Button asChild variant="outline" className="h-12 rounded-xl border-white/30 bg-transparent px-5 text-white hover:bg-white/10 hover:text-white">
-            <Link href="/inventario">Ver inventario <Package /></Link>
+          <Button
+            asChild
+            variant="outline"
+            className="h-12 rounded-xl border-white/30 bg-transparent px-5 text-white hover:bg-white/10 hover:text-white"
+          >
+            <Link href="/inventario">
+              Ver inventario <Package />
+            </Link>
           </Button>
         </div>
       </section>
       <section className="grid gap-4 sm:grid-cols-3">
-        <MetricCard label="Ventas de hoy" value={formatMoney(Number(salesToday._sum.total ?? 0))} detail={`${salesToday._count._all} ${salesToday._count._all === 1 ? "venta registrada" : "ventas registradas"}`} />
-        <MetricCard label="Productos activos" value={productCount.toLocaleString("es-SV")} detail="En el catálogo" />
-        <MetricCard label="Por reponer" value={Number(lowStock[0]?.count ?? 0).toLocaleString("es-SV")} detail="En mínimo o por debajo" alert />
+        <MetricCard
+          label="Ventas de hoy"
+          value={formatMoney(Number(salesToday._sum.total ?? 0))}
+          detail={`${salesToday._count._all} ${salesToday._count._all === 1 ? "venta registrada" : "ventas registradas"}`}
+        />
+        <MetricCard
+          label="Productos activos"
+          value={productCount.toLocaleString("es-SV")}
+          detail="En el catálogo"
+        />
+        <MetricCard
+          label="Por reponer"
+          value={Number(lowStock[0]?.count ?? 0).toLocaleString("es-SV")}
+          detail="En mínimo o por debajo"
+          alert
+        />
       </section>
       <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="panel-shadow border-border/80">
           <CardHeader className="flex flex-row items-end justify-between space-y-0">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Datos del negocio</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
+                Datos del negocio
+              </p>
               <CardTitle className="display-heading mt-1 text-2xl">Categorías destacadas</CardTitle>
             </div>
             <span className="text-xs text-muted-foreground">Desempeño histórico</span>
@@ -91,9 +118,13 @@ export default async function HomePage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{category.categoryName}</p>
-                      <p className="text-xs text-muted-foreground">{category.itemsSold} artículos vendidos</p>
+                      <p className="text-xs text-muted-foreground">
+                        {category.itemsSold} artículos vendidos
+                      </p>
                     </div>
-                    <span className="shrink-0 text-sm font-bold tabular-nums">{formatMoney(revenue)}</span>
+                    <span className="shrink-0 text-sm font-bold tabular-nums">
+                      {formatMoney(revenue)}
+                    </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-muted">
                     <div
@@ -114,11 +145,15 @@ export default async function HomePage() {
         <Card className="panel-shadow border-border/80">
           <CardHeader className="flex flex-row items-end justify-between space-y-0">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Actividad</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
+                Actividad
+              </p>
               <CardTitle className="display-heading mt-1 text-2xl">Ventas recientes</CardTitle>
             </div>
             <Button asChild variant="ghost" size="sm">
-              <Link href="/ventas">Ver punto de venta <ArrowUpRight /></Link>
+              <Link href="/ventas">
+                Ver punto de venta <ArrowUpRight />
+              </Link>
             </Button>
           </CardHeader>
           <CardContent>
@@ -129,7 +164,8 @@ export default async function HomePage() {
                     <div>
                       <p className="font-semibold">Venta #{sale.number}</p>
                       <p className="text-xs text-muted-foreground">
-                        {formatDateTime(sale.soldAt)} · {sale.lines.reduce((sum, line) => sum + line.quantity, 0)} artículos
+                        {formatDateTime(sale.soldAt)} ·{" "}
+                        {sale.lines.reduce((sum, line) => sum + line.quantity, 0)} artículos
                       </p>
                     </div>
                     <div className="text-right">
@@ -151,7 +187,9 @@ export default async function HomePage() {
                   Registra una venta y el inventario se actualizará automáticamente.
                 </p>
                 <Button asChild className="mt-4 rounded-xl">
-                  <Link href="/ventas">Registrar venta <ShoppingCart /></Link>
+                  <Link href="/ventas">
+                    Registrar venta <ShoppingCart />
+                  </Link>
                 </Button>
               </div>
             )}
@@ -165,13 +203,19 @@ export default async function HomePage() {
               <ArrowDownRight className="size-5" />
             </span>
             <div>
-              <p className="font-semibold text-amber-950">El inventario se mueve con cada operación</p>
+              <p className="font-semibold text-amber-950">
+                El inventario se mueve con cada operación
+              </p>
               <p className="text-sm text-amber-900/75">
                 Las ventas descuentan unidades y cada ajuste queda registrado con su motivo.
               </p>
             </div>
           </div>
-          <Link href="/inventario" prefetch={false} className="whitespace-nowrap text-sm font-bold text-primary">
+          <Link
+            href="/inventario"
+            prefetch={false}
+            className="whitespace-nowrap text-sm font-bold text-primary"
+          >
             Revisar existencias →
           </Link>
         </CardContent>
@@ -180,7 +224,17 @@ export default async function HomePage() {
   );
 }
 
-function MetricCard({ label, value, detail, alert = false }: { label: string; value: string; detail: string; alert?: boolean }) {
+function MetricCard({
+  label,
+  value,
+  detail,
+  alert = false,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  alert?: boolean;
+}) {
   const Icon = alert ? CircleAlert : label === "Ventas de hoy" ? ShoppingCart : Package;
   const tone = alert ? "bg-amber-100 text-amber-800" : "bg-secondary text-primary";
   return (

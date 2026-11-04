@@ -5,6 +5,7 @@ import { isAllowed } from "@/lib/auth-helpers";
 import { requirePagePermission } from "@/lib/require-page-permission";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Punto de venta" };
 const PAGE_SIZE = 8;
 
 export default async function SalesPage({

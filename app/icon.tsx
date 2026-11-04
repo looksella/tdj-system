@@ -95,35 +95,33 @@ export default async function Icon({ id }: { id: string }) {
   const fontScale = maskable ? 0.42 : 0.55;
   const logo = await logoDataUri();
   return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: themeColor,
-          color: "#ffffff",
-          fontSize: Math.round(size * fontScale),
-          fontWeight: 700,
-          letterSpacing: "-0.05em",
-        }}
-      >
-        {logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logo}
-            alt=""
-            width={Math.round(size * (maskable ? 0.55 : 0.7))}
-            height={Math.round(size * (maskable ? 0.55 : 0.7))}
-            style={{ objectFit: "contain" }}
-          />
-        ) : (
-          initials(name)
-        )}
-      </div>
-    ),
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: themeColor,
+        color: "#ffffff",
+        fontSize: Math.round(size * fontScale),
+        fontWeight: 700,
+        letterSpacing: "-0.05em",
+      }}
+    >
+      {logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logo}
+          alt=""
+          width={Math.round(size * (maskable ? 0.55 : 0.7))}
+          height={Math.round(size * (maskable ? 0.55 : 0.7))}
+          style={{ objectFit: "contain" }}
+        />
+      ) : (
+        initials(name)
+      )}
+    </div>,
     { width: size, height: size },
   );
 }

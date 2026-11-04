@@ -17,9 +17,9 @@ export function SinFicha({ que }: { que: string }) {
         </span>
         <h1 className="display-heading mt-4 text-xl font-bold">Falta vincular tu cuenta</h1>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Tu usuario todavía no tiene una ficha del equipo, así que no podemos
-          registrar {que} a tu nombre. Pedile al administrador que agregue tu
-          correo en Planilla → Personas y condiciones.
+          Tu usuario todavía no tiene una ficha del equipo, así que no podemos registrar {que} a tu
+          nombre. Pedile al administrador que agregue tu correo en Planilla → Personas y
+          condiciones.
         </p>
         <Button asChild variant="outline" className="mt-5 rounded-xl">
           <Link href="/ventas">Ir al punto de venta</Link>

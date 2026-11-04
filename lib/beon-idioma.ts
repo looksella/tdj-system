@@ -6,10 +6,7 @@ export function idiomaDelNegocio(): Idioma {
   const declarado = process.env.NEXT_PUBLIC_BEON_LOCALE;
   if (declarado === "pt" || declarado === "es") return declarado;
   // Otherwise infer Portuguese from the browser when available.
-  if (
-    typeof navigator !== "undefined" &&
-    navigator.language?.toLowerCase().startsWith("pt")
-  ) {
+  if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("pt")) {
     return "pt";
   }
   // Spanish is the default locale.

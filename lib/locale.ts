@@ -13,10 +13,7 @@ export const formatMoney = (n: number) =>
     currency: CURRENCY,
     maximumFractionDigits: 2,
   }).format(n);
-export const formatDate = (
-  d: Date | string,
-  opts?: Intl.DateTimeFormatOptions,
-) =>
+export const formatDate = (d: Date | string, opts?: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat(LOCALE, {
     timeZone: TIMEZONE,
     day: "2-digit",
