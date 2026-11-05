@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ProductTable } from "@/components/inventory/product-table";
 import { ProductDialog } from "@/components/inventory/product-dialog";
+import { RemoteScannerModal } from "@/components/scanner/remote-scanner-modal";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatMoney } from "@/lib/locale";
 import { isAllowed } from "@/lib/auth-helpers";
@@ -102,6 +103,10 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {process.env.NEXT_PUBLIC_ENABLE_REMOTE_SCANNER === "true" &&
+            (isAllowed(user.role, "pos:read") || isAllowed(user.role, "inventory:read")) && (
+              <RemoteScannerModal mode="inventory" />
+            )}
           {canManageInventory && (
             <>
               <Link

@@ -44,6 +44,8 @@ import {
   searchPosProducts,
 } from "@/lib/actions/commerce";
 import { useRef } from "react";
+import { RemoteScannerModal } from "@/components/scanner/remote-scanner-modal";
+import type { ScannedProduct } from "@/lib/actions/commerce";
 type Product = {
   id: string;
   name: string;
@@ -137,6 +139,12 @@ export function PosScreen({
       return [...current, { ...product, quantity: 1 }];
     });
   }
+  function addScanned(product: ScannedProduct): "ok" | "sin_stock" {
+    const quantityInCart = cart.find((line) => line.id === product.id)?.quantity ?? 0;
+    if (quantityInCart + 1 > product.currentStock) return "sin_stock";
+    add(product);
+    return "ok";
+  }
   function changeQuantity(id: string, delta: number) {
     setCart((current) =>
       current
@@ -186,14 +194,17 @@ export function PosScreen({
               </p>
               <CardTitle className="display-heading mt-1 text-2xl">Elige tus productos</CardTitle>
             </div>
-            <div className="relative w-full sm:max-w-sm">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={term}
-                onChange={(event) => setTerm(event.target.value)}
-                placeholder="Buscar por nombre o código…"
-                className="h-11 rounded-xl pl-9"
-              />
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={term}
+                  onChange={(event) => setTerm(event.target.value)}
+                  placeholder="Buscar por nombre o código…"
+                  className="h-11 rounded-xl pl-9"
+                />
+              </div>
+              <RemoteScannerModal mode="pos" onFound={addScanned} />
             </div>
           </div>
         </CardHeader>
