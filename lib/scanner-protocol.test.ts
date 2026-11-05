@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isScannerStatus, parseScanEvent } from "./scanner-protocol";
+import { createScannerUuid, isScannerStatus, parseScanEvent } from "./scanner-protocol";
+
+describe("createScannerUuid", () => {
+  it("genera identificadores UUID v4", () => {
+    const uuid = createScannerUuid();
+
+    expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  });
+});
 
 describe("parseScanEvent", () => {
   it("acepta un evento de escaneo bien formado y recorta el código", () => {

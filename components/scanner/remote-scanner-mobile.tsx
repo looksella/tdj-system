@@ -7,7 +7,12 @@ import { Camera, CameraOff, Flashlight, FlashlightOff } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { isScannerStatus, type ScannerResult, type ScannerStatus } from "@/lib/scanner-protocol";
+import {
+  createScannerUuid,
+  isScannerStatus,
+  type ScannerResult,
+  type ScannerStatus,
+} from "@/lib/scanner-protocol";
 
 const STORAGE_KEY = "tdj.scanner.mobile";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -209,7 +214,7 @@ export function RemoteScannerMobile() {
     const channel = supabase.channel(`scanner:${sessionId}`, {
       config: {
         broadcast: { self: false },
-        presence: { key: crypto.randomUUID() },
+        presence: { key: createScannerUuid() },
       },
     });
     channelRef.current = channel;

@@ -5,7 +5,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { findProductByCode, type ScannedProduct } from "@/lib/actions/commerce";
 import { createClient } from "@/lib/supabase/client";
-import { parseScanEvent, type ScannerStatus } from "@/lib/scanner-protocol";
+import { createScannerUuid, parseScanEvent, type ScannerStatus } from "@/lib/scanner-protocol";
 
 const STORAGE_KEY = "tdj.scanner.pc";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -16,8 +16,8 @@ type ScanHandler = (product: ScannedProduct) => "ok" | "sin_stock" | Promise<"ok
 
 function createSession(): ScannerSession {
   return {
-    id: crypto.randomUUID(),
-    nonce: crypto.randomUUID(),
+    id: createScannerUuid(),
+    nonce: createScannerUuid(),
     createdAt: Date.now(),
   };
 }
@@ -67,7 +67,11 @@ export function useRemoteScannerPc(onFound: ScanHandler) {
       setSession(nextSession);
     } catch (error) {
       console.error("[remote-scanner] no se pudo guardar la sesión en este navegador.", error);
-      toast.error("No se pudo guardar la sesión del escáner en este navegador.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar la sesión del escáner en este navegador.",
+      );
     }
   }, []);
 
@@ -84,7 +88,7 @@ export function useRemoteScannerPc(onFound: ScanHandler) {
     const channel = supabase.channel(`scanner:${session.id}`, {
       config: {
         broadcast: { self: false },
-        presence: { key: crypto.randomUUID() },
+        presence: { key: createScannerUuid() },
       },
     });
     channelRef.current = channel;
