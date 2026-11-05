@@ -33,11 +33,13 @@
 ### Task 1: Esquema y reglas puras de código de barras (Parte A)
 
 **Files:**
+
 - Create: \`lib/product-barcode.ts\`
 - Create: \`lib/product-barcode.test.ts\`
 - Modify: \`prisma/schema.prisma\`
 
 **Interfaces:**
+
 - Produces \`parseBarcode(raw: string): string | null\` y \`isBarcodeFormatValid(raw: string): boolean\`.
 - \`commerce.ts\` consume \`parseBarcode\` para guardar \`null\` para vacío y rechazar valores inválidos.
 
@@ -50,11 +52,13 @@
 ### Task 2: Acciones seguras de producto y consulta de escaneo (Parte B)
 
 **Files:**
+
 - Create: \`lib/scanner-protocol.ts\`
 - Create: \`lib/scanner-protocol.test.ts\`
 - Modify: \`lib/actions/commerce.ts\`
 
 **Interfaces:**
+
 - Consumes \`parseBarcode\`.
 - Produces \`findProductByCode(raw: string)\` con estados \`ok | not_found | retirado | error\`, y \`deleteProduct(id: string)\` con \`{ ok, message }\`.
 - \`use-remote-scanner-pc.ts\` consume el producto serializado de \`findProductByCode\`.
@@ -68,12 +72,14 @@
 ### Task 3: Gestión de barcode y eliminación en inventario (Parte C)
 
 **Files:**
+
 - Modify: \`app/(workspace)/inventario/page.tsx\`
 - Modify: \`components/inventory/product-dialog.tsx\`
 - Modify: \`components/inventory/product-actions.tsx\`
 - Modify: \`components/inventory/product-table.tsx\`
 
 **Interfaces:**
+
 - Consumes \`deleteProduct\` y los tipos de producto con \`barcode\`.
 - Produce el formulario de barcode y \`DeleteProduct({ id, name, stock })\`.
 
@@ -86,6 +92,7 @@
 ### Task 4: Transporte remoto y escáner móvil (Parte D)
 
 **Files:**
+
 - Create: \`hooks/use-remote-scanner-pc.ts\`
 - Create: \`components/scanner/remote-scanner-modal.tsx\`
 - Create: \`components/scanner/mobile-scanner.tsx\`
@@ -95,6 +102,7 @@
 - Modify: \`package-lock.json\`
 
 **Interfaces:**
+
 - Consumes \`findProductByCode\`, \`createClient\`, \`ScannerStatus\` y \`ScanEvent\`.
 - Produces \`useRemoteScannerPc({ onFound })\` con \`sessionUrl\`, \`connected\`, \`unlink\` y \`refresh\`.
 - La UI de PC consume el hook y la página móvil publica eventos \`scan\`.
@@ -109,12 +117,14 @@
 ### Task 5: Integración, encabezados y entrega operativa (Parte E)
 
 **Files:**
+
 - Modify: \`components/sales/pos-screen.tsx\`
 - Modify: \`components/inventory/product-table.tsx\`
 - Modify: \`proxy.ts\`
 - Modify: \`README.md\`
 
 **Interfaces:**
+
 - POS entrega \`onFound(product) => "ok" | "sin_stock"\` sin tocar el cobro.
 - Inventario entrega \`onFound(product) => "ok"\` y navega con filtros conservados y página reiniciada.
 
