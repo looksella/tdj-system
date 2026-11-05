@@ -2,14 +2,18 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { autorizarAccion, guardAccion } from "@/lib/guard-autorizacion";
+import { autorizarAccion, autorizarAlgunaAccion, guardAccion } from "@/lib/guard-autorizacion";
 import { cashMethodFromSale, lockCashOperations } from "@/lib/caja";
 import { categorySkuPrefix, nextAvailableProductSku } from "@/lib/product-sku";
+import { parseBarcode } from "@/lib/product-barcode";
+import { productImageStoragePath } from "@/lib/product-image";
+import { borrarArchivos, storageActivo } from "@/lib/beon-storage";
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
 function productInput(formData: FormData, generatedSku?: string) {
   const sku = generatedSku ?? text(formData.get("sku"));
+  const barcode = parseBarcode(text(formData.get("barcode")));
   const name = text(formData.get("name"));
   const rawImageUrl = text(formData.get("imageUrl"));
   const rawExpiryDate = text(formData.get("expiryDate"));
@@ -59,6 +63,7 @@ function productInput(formData: FormData, generatedSku?: string) {
   }
   return {
     sku,
+    barcode,
     name,
     description: text(formData.get("description")) || null,
     categoryId: text(formData.get("categoryId")) || null,
@@ -70,6 +75,53 @@ function productInput(formData: FormData, generatedSku?: string) {
     hasExpiry: expiryDate !== null,
     isActive: formData.get("isActive") === "on",
   };
+}
+
+function uniqueViolationIncludes(error: unknown, field: string) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+    return false;
+  }
+  const target = error.meta?.target;
+  const values = Array.isArray(target) ? target : typeof target === "string" ? [target] : [];
+  return values.some(
+    (value) => typeof value === "string" && value.toLowerCase().includes(field.toLowerCase()),
+  );
+}
+
+async function rejectBarcodeSkuCollision(
+  tx: Prisma.TransactionClient,
+  barcode: string | null,
+  productId?: string,
+) {
+  if (!barcode) return;
+  const match = await tx.producto.findFirst({
+    where: {
+      sku: { equals: barcode, mode: "insensitive" },
+      ...(productId ? { NOT: { id: productId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (match) throw new Error("Ese código de barras ya pertenece a otro producto.");
+}
+
+async function deleteProductImage(imageUrl: string | null) {
+  if (!imageUrl || !storageActivo()) return;
+  const path = productImageStoragePath(
+    imageUrl,
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "",
+  );
+  if (!path) return;
+  try {
+    const sharedImage = await db.producto.findFirst({
+      where: { imageUrl },
+      select: { id: true },
+    });
+    if (sharedImage) return;
+    await borrarArchivos([path]);
+  } catch (error) {
+    console.error("[deleteProduct] no se pudo limpiar la imagen del producto.", error);
+  }
 }
 
 async function nextProductSku(tx: Prisma.TransactionClient, categoryId: string) {
@@ -119,9 +171,11 @@ export async function createProduct(formData: FormData) {
       try {
         sku = await db.$transaction(async (tx) => {
           const generatedSku = await nextProductSku(tx, categoryId);
+          const input = productInput(formData, generatedSku);
+          await rejectBarcodeSkuCollision(tx, input.barcode);
           const product = await tx.producto.create({
             data: {
-              ...productInput(formData, generatedSku),
+              ...input,
               currentStock: initialStock,
               createdBy: actorId,
               updatedBy: actorId,
@@ -144,7 +198,9 @@ export async function createProduct(formData: FormData) {
         break;
       } catch (error) {
         const isSkuCollision =
-          error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002" &&
+          !uniqueViolationIncludes(error, "barcode");
         if (!isSkuCollision || attempt === 4) throw error;
       }
     }
@@ -152,6 +208,9 @@ export async function createProduct(formData: FormData) {
     revalidatePath("/");
     return { ok: true, message: `Producto agregado al inventario con el código ${sku}.` };
   } catch (error) {
+    if (uniqueViolationIncludes(error, "barcode")) {
+      return { ok: false, message: "Ese código de barras ya pertenece a otro producto." };
+    }
     return {
       ok: false,
       message: error instanceof Error ? error.message : "No se pudo guardar el producto.",
@@ -162,14 +221,21 @@ export async function updateProduct(id: string, formData: FormData) {
   const authorization = await autorizarAccion("inventory:manage");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
   try {
-    await db.producto.update({
-      where: { id },
-      data: { ...productInput(formData), updatedBy: authorization.usuario.id },
+    await db.$transaction(async (tx) => {
+      const input = productInput(formData);
+      await rejectBarcodeSkuCollision(tx, input.barcode, id);
+      await tx.producto.update({
+        where: { id },
+        data: { ...input, updatedBy: authorization.usuario.id },
+      });
     });
     revalidatePath("/inventario");
     revalidatePath("/");
     return { ok: true, message: "Cambios guardados." };
   } catch (error) {
+    if (uniqueViolationIncludes(error, "barcode")) {
+      return { ok: false, message: "Ese código de barras ya pertenece a otro producto." };
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return {
         ok: false,
@@ -197,6 +263,121 @@ export async function archiveProduct(id: string) {
     return { ok: false, message: "No se pudo retirar este producto." };
   }
 }
+
+export async function deleteProduct(id: string) {
+  const authorization = await autorizarAccion("inventory:manage");
+  if (!authorization.usuario) return { ok: false, message: authorization.denial };
+
+  try {
+    const result = await db.$transaction(async (tx) => {
+      const product = await tx.producto.findUnique({
+        where: { id },
+        select: { imageUrl: true },
+      });
+      if (!product) return { status: "missing" as const };
+
+      const [sales, purchases] = await Promise.all([
+        tx.lineaVenta.count({ where: { productId: id } }),
+        tx.lineaCompra.count({ where: { productId: id } }),
+      ]);
+      if (sales > 0 || purchases > 0) return { status: "has-history" as const };
+
+      await tx.movimientoStock.deleteMany({ where: { productId: id } });
+      await tx.producto.delete({ where: { id } });
+      return { status: "deleted" as const, imageUrl: product.imageUrl };
+    });
+
+    if (result.status === "missing") {
+      return { ok: false, message: "El producto ya no existe." };
+    }
+    if (result.status === "has-history") {
+      return {
+        ok: false,
+        message:
+          "Este producto tiene ventas o compras registradas y no se puede eliminar. Usa “Retirar del catálogo” para conservar el historial.",
+      };
+    }
+
+    await deleteProductImage(result.imageUrl);
+    revalidatePath("/inventario");
+    revalidatePath("/");
+    return { ok: true, message: "Producto eliminado definitivamente." };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2003") {
+        return {
+          ok: false,
+          message:
+            "Este producto tiene ventas o compras registradas y no se puede eliminar. Usa “Retirar del catálogo” para conservar el historial.",
+        };
+      }
+      if (error.code === "P2025") {
+        return { ok: false, message: "El producto ya no existe." };
+      }
+    }
+    console.error("[deleteProduct] no se pudo eliminar el producto.", error);
+    return { ok: false, message: "No se pudo eliminar el producto." };
+  }
+}
+
+export type ScannedProduct = {
+  id: string;
+  sku: string;
+  name: string;
+  salePrice: string;
+  currentStock: number;
+  isActive: boolean;
+  categoryName: string | null;
+};
+
+export type FindProductByCodeResult =
+  | { status: "ok"; product: ScannedProduct }
+  | { status: "not_found" }
+  | { status: "retirado" }
+  | { status: "error" };
+
+export async function findProductByCode(raw: string): Promise<FindProductByCodeResult> {
+  const authorization = await autorizarAlgunaAccion(["pos:read", "inventory:read"]);
+  if (!authorization.usuario) return { status: "error" };
+  if (typeof raw !== "string" || !raw.trim()) return { status: "not_found" };
+
+  try {
+    const code = raw.trim();
+    const product = await db.producto.findFirst({
+      where: {
+        OR: [{ barcode: code }, { sku: { equals: code, mode: "insensitive" } }],
+      },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        salePrice: true,
+        currentStock: true,
+        isActive: true,
+        category: { select: { categoryName: true } },
+      },
+    });
+    if (!product) return { status: "not_found" };
+    if (!product.isActive) return { status: "retirado" };
+
+    return {
+      status: "ok",
+      product: {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        salePrice: product.salePrice.toString(),
+        currentStock: product.currentStock,
+        isActive: product.isActive,
+        categoryName: product.category?.categoryName ?? null,
+      },
+    };
+  } catch (error) {
+    console.error("[findProductByCode] no se pudo buscar el producto.", error);
+    return { status: "error" };
+  }
+}
+
 export async function adjustStock(id: string, delta: number, note: string) {
   const authorization = await autorizarAccion("inventory:manage");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };

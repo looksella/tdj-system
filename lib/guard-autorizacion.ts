@@ -34,17 +34,24 @@ type ResultadoAutorizacion =
   { usuario: UsuarioAutorizado; denial: null } | { usuario: null; denial: string };
 
 export async function autorizarAccion(accion: string): Promise<ResultadoAutorizacion> {
+  return autorizarAlgunaAccion([accion], accion);
+}
+
+export async function autorizarAlgunaAccion(
+  acciones: readonly string[],
+  nombreAccion = acciones.join(" o "),
+): Promise<ResultadoAutorizacion> {
   let usuario: Awaited<ReturnType<typeof getEffectiveUser>>;
   try {
     usuario = await getEffectiveUser();
   } catch (error) {
     console.error(
-      `[guard-autorizacion] no se pudo leer la sesión para "${accion}": se niega`,
+      `[guard-autorizacion] no se pudo leer la sesión para "${nombreAccion}": se niega`,
       error,
     );
     return { usuario: null, denial: SIN_PERMISO };
   }
-  if (!usuario || !isAllowed(usuario.role, accion)) {
+  if (!usuario || !acciones.some((accion) => isAllowed(usuario.role, accion))) {
     return { usuario: null, denial: SIN_PERMISO };
   }
   return { usuario, denial: null };
