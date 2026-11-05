@@ -21,6 +21,7 @@ type SearchParams = Promise<{
 type ProductRow = {
   id: string;
   sku: string;
+  barcode: string | null;
   name: string;
   description: string | null;
   categoryId: string | null;
@@ -61,13 +62,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
   const orderBy = direction === "desc" ? Prisma.sql`DESC` : Prisma.sql`ASC`;
   const filters = Prisma.sql`
     ${canManageInventory ? Prisma.empty : Prisma.sql`AND p.is_active = true`}
-    ${search ? Prisma.sql`AND (p.name ILIKE ${`%${search}%`} OR p.sku ILIKE ${`%${search}%`})` : Prisma.empty}
+    ${search ? Prisma.sql`AND (p.name ILIKE ${`%${search}%`} OR p.sku ILIKE ${`%${search}%`} OR p.barcode ILIKE ${`%${search}%`})` : Prisma.empty}
     ${categoryId ? Prisma.sql`AND p.category_id = ${categoryId}::uuid` : Prisma.empty}
     ${lowOnly ? Prisma.sql`AND p.current_stock <= p.min_stock` : Prisma.empty}
   `;
   const [productRows, countRows, categories, lowCount, activeCount] = await Promise.all([
     db.$queryRaw<ProductRow[]>(
-      Prisma.sql`SELECT p.id, p.sku, p.name, p.description, p.category_id AS "categoryId", COALESCE(c.category_name, '') AS "categoryName", p.purchase_price::text AS "purchasePrice", p.sale_price::text AS "salePrice", p.current_stock AS "currentStock", p.min_stock AS "minStock", p.image_url AS "imageUrl", p.expiry_date::text AS "expiryDate", p.is_active AS "isActive" FROM productos p LEFT JOIN categorias c ON c.id = p.category_id WHERE TRUE ${filters} ORDER BY ${SORT_COLUMNS[sort]} ${orderBy} NULLS LAST, p.name ASC LIMIT ${PAGE_SIZE} OFFSET ${skip}`,
+      Prisma.sql`SELECT p.id, p.sku, p.barcode, p.name, p.description, p.category_id AS "categoryId", COALESCE(c.category_name, '') AS "categoryName", p.purchase_price::text AS "purchasePrice", p.sale_price::text AS "salePrice", p.current_stock AS "currentStock", p.min_stock AS "minStock", p.image_url AS "imageUrl", p.expiry_date::text AS "expiryDate", p.is_active AS "isActive" FROM productos p LEFT JOIN categorias c ON c.id = p.category_id WHERE TRUE ${filters} ORDER BY ${SORT_COLUMNS[sort]} ${orderBy} NULLS LAST, p.name ASC LIMIT ${PAGE_SIZE} OFFSET ${skip}`,
     ),
     db.$queryRaw<Array<{ count: bigint }>>(
       Prisma.sql`SELECT COUNT(*)::bigint AS count FROM productos p WHERE TRUE ${filters}`,

@@ -38,7 +38,7 @@ export async function GET(request: Request) {
   const orderBy = params.get("direccion") === "desc" ? Prisma.sql`DESC` : Prisma.sql`ASC`;
   const filters = Prisma.sql`
     ${isAllowed(user.role, "inventory:manage") ? Prisma.empty : Prisma.sql`AND p.is_active = true`}
-    ${search ? Prisma.sql`AND (p.name ILIKE ${`%${search}%`} OR p.sku ILIKE ${`%${search}%`})` : Prisma.empty}
+    ${search ? Prisma.sql`AND (p.name ILIKE ${`%${search}%`} OR p.sku ILIKE ${`%${search}%`} OR p.barcode ILIKE ${`%${search}%`})` : Prisma.empty}
     ${categoryId ? Prisma.sql`AND p.category_id = ${categoryId}::uuid` : Prisma.empty}
     ${lowOnly ? Prisma.sql`AND p.current_stock <= p.min_stock` : Prisma.empty}
   `;

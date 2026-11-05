@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Archive, ArrowDownToLine, ArrowUpFromLine, SlidersHorizontal } from "lucide-react";
+import { Archive, ArrowDownToLine, ArrowUpFromLine, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { adjustStock, archiveProduct } from "@/lib/actions/commerce";
+import { adjustStock, archiveProduct, deleteProduct } from "@/lib/actions/commerce";
 export function StockAdjustment({ id, name, stock }: { id: string; name: string; stock: number }) {
   const [open, setOpen] = useState(false);
   const [delta, setDelta] = useState(1);
@@ -142,6 +142,59 @@ export function ArchiveProduct({ id, name }: { id: string; name: string }) {
             }}
           >
             {pending ? "Retirando…" : "Retirar producto"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+export function DeleteProduct({ id, name, stock }: { id: string; name: string; stock: number }) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const stockWarning =
+    stock > 0 ? ` y se perderán sus ${stock} unidades de existencia registradas` : "";
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-destructive"
+          disabled={pending}
+          aria-label={`Eliminar ${name}`}
+        >
+          <Trash2 />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Eliminar producto</AlertDialogTitle>
+          <AlertDialogDescription>
+            Se eliminará “{name}” de forma definitiva{stockWarning}. Esta acción no se puede
+            deshacer. Si solo quieres dejar de venderlo, usa Retirar del catálogo.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={pending}
+            onClick={(event) => {
+              event.preventDefault();
+              startTransition(async () => {
+                const result = await deleteProduct(id);
+                if (result.ok) {
+                  toast.success(result.message);
+                  setOpen(false);
+                } else {
+                  toast.error(result.message);
+                }
+              });
+            }}
+          >
+            {pending ? "Eliminando…" : "Eliminar definitivamente"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

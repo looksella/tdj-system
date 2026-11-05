@@ -19,6 +19,7 @@ import { createProduct, suggestProductSku, updateProduct } from "@/lib/actions/c
 type Product = {
   id: string;
   sku: string;
+  barcode: string | null;
   name: string;
   description: string | null;
   categoryId: string | null;
@@ -131,6 +132,17 @@ export function ProductDialog({
                 placeholder="Nombre del producto"
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="barcode">Código de barras (opcional)</Label>
+            <Input
+              id="barcode"
+              name="barcode"
+              defaultValue={product?.barcode ?? ""}
+              autoComplete="off"
+              inputMode="text"
+              maxLength={64}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="categoryId">Categoría</Label>

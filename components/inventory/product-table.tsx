@@ -26,13 +26,18 @@ import {
 } from "@/components/ui/table";
 import { formatDate, formatMoney } from "@/lib/locale";
 import { ProductDialog } from "@/components/inventory/product-dialog";
-import { ArchiveProduct, StockAdjustment } from "@/components/inventory/product-actions";
+import {
+  ArchiveProduct,
+  DeleteProduct,
+  StockAdjustment,
+} from "@/components/inventory/product-actions";
 
 type Category = { id: string; categoryName: string };
 type SortKey = "producto" | "categoria" | "precio" | "existencias" | "vencimiento" | "estado";
 type Product = {
   id: string;
   sku: string;
+  barcode: string | null;
   name: string;
   description: string | null;
   categoryId: string | null;
@@ -256,6 +261,11 @@ export function ProductTable({
                             {product.isActive && (
                               <ArchiveProduct id={product.id} name={product.name} />
                             )}
+                            <DeleteProduct
+                              id={product.id}
+                              name={product.name}
+                              stock={product.currentStock}
+                            />
                           </div>
                         </TableCell>
                       )}
