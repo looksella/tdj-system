@@ -67,7 +67,7 @@ try {
     const rows = readCsv("./data/productos.csv").slice(0, 500);
     const products = [];
     for (const row of rows) {
-      const valid =
+      const valid = 
         row.id &&
         row.sku &&
         row.name &&
