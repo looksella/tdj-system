@@ -96,12 +96,36 @@ function crearCsp(nonce: string): string {
   ].join("; ");
 }
 
-function agregarHeadersDeSeguridad(response: NextResponse, csp: string): NextResponse {
+function rutaEscanerMovil(pathname: string): boolean {
+  return pathname === "/escaner-movil" || pathname.startsWith("/escaner-movil/");
+}
+
+function redirigirAlInicioDeSesion(request: NextRequest): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = "/sign-in";
+  url.search = `?redirect_url=${encodeURIComponent(
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+  )}`;
+  return NextResponse.redirect(url);
+}
+
+function agregarHeadersDeSeguridad(
+  response: NextResponse,
+  csp: string,
+  pathname: string,
+): NextResponse {
+  const scannerRoute = rutaEscanerMovil(pathname);
   response.headers.set("Content-Security-Policy", csp);
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  response.headers.set(
+    "Referrer-Policy",
+    scannerRoute ? "no-referrer" : "strict-origin-when-cross-origin",
+  );
+  response.headers.set(
+    "Permissions-Policy",
+    `camera=${scannerRoute ? "(self)" : "()"}, microphone=(), geolocation=()`,
+  );
   response.headers.set("X-XSS-Protection", "0");
   return response;
 }
@@ -123,13 +147,14 @@ export async function proxy(request: NextRequest) {
       return agregarHeadersDeSeguridad(
         NextResponse.next({ request: { headers: crearHeadersDeRequest() } }),
         csp,
+        request.nextUrl.pathname,
       );
     }
-    const url = request.nextUrl.clone();
-    url.pathname = "/sign-in";
-    url.search = "";
-    url.searchParams.set("redirect_url", request.nextUrl.pathname);
-    return agregarHeadersDeSeguridad(NextResponse.redirect(url), csp);
+    return agregarHeadersDeSeguridad(
+      redirigirAlInicioDeSesion(request),
+      csp,
+      request.nextUrl.pathname,
+    );
   }
   // Supabase refresca la sesión y redirige si no hay usuario.
   let supabaseResponse = NextResponse.next({ request: { headers: crearHeadersDeRequest() } });
@@ -154,14 +179,7 @@ export async function proxy(request: NextRequest) {
     error,
   } = await supabase.auth.getUser();
   if (isInvalidRefreshToken(error)) {
-    const response = isPublicPath
-      ? supabaseResponse
-      : (() => {
-          const url = request.nextUrl.clone();
-          url.pathname = "/sign-in";
-          url.searchParams.set("redirect_url", request.nextUrl.pathname);
-          return NextResponse.redirect(url);
-        })();
+    const response = isPublicPath ? supabaseResponse : redirigirAlInicioDeSesion(request);
     for (const { name } of request.cookies.getAll()) {
       if (isSupabaseSessionCookie(name)) {
         response.cookies.set(name, "", {
@@ -173,17 +191,18 @@ export async function proxy(request: NextRequest) {
         });
       }
     }
-    return agregarHeadersDeSeguridad(response, csp);
+    return agregarHeadersDeSeguridad(response, csp, request.nextUrl.pathname);
   }
   if (!user && !isPublicPath) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/sign-in";
-    url.searchParams.set("redirect_url", request.nextUrl.pathname);
-    return agregarHeadersDeSeguridad(NextResponse.redirect(url), csp);
+    return agregarHeadersDeSeguridad(
+      redirigirAlInicioDeSesion(request),
+      csp,
+      request.nextUrl.pathname,
+    );
   }
   // SIEMPRE `supabaseResponse`, nunca un `NextResponse.next()` nuevo: si no,
   // las cookies refrescadas se pierden y la sesión se cae sola.
-  return agregarHeadersDeSeguridad(supabaseResponse, csp);
+  return agregarHeadersDeSeguridad(supabaseResponse, csp, request.nextUrl.pathname);
 }
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
