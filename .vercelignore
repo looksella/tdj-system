@@ -1,0 +1,7 @@
+.env*
+node_modules/
+.next/
+.vercel/
+.git/
+.cloud-attachments/
+prisma/data/
