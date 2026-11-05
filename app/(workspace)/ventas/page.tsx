@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/locale";
 import { isAllowed } from "@/lib/auth-helpers";
 import { requirePagePermission } from "@/lib/require-page-permission";
+import { isRemoteScannerEnabled } from "@/lib/remote-scanner-config";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Punto de venta" };
@@ -67,6 +68,7 @@ export default async function SalesPage({
       salesPage={page}
       salesPageCount={Math.max(1, Math.ceil(count / PAGE_SIZE))}
       canManageSales={canManageSales}
+      scannerEnabled={isRemoteScannerEnabled()}
     />
   );
 }

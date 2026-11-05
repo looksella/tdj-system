@@ -20,6 +20,7 @@ DIRECT_DATABASE_URL="URI_DIRECTA_O_SESSION_POOLER"
 NEXT_PUBLIC_SUPABASE_URL="URL_DEL_PROYECTO"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="CLAVE_PUBLICA"
 SUPABASE_SERVICE_ROLE_KEY="CLAVE_PRIVADA_DE_SERVIDOR"
+REMOTE_SCANNER_ENABLED="true"
 ```
 
 No publiques `.env` ni compartas la clave privada. La clave privada solo debe usarse en procesos de servidor.
@@ -80,6 +81,8 @@ El reparto vive en `lib/auth-helpers.ts` (`PERMISSIONS` y `PERMISOS_TURNO`) y se
 Las funciones opcionales de asistente, lectura de archivos, correo y calendario requieren configurar `BEON_TOOLS_URL` y `BEON_TOOLS_API_KEY` para un servicio compatible. La app de ventas e inventario no requiere esas variables. Para almacenamiento de imágenes, configura además `NEXT_PUBLIC_SUPABASE_BUCKET` y crea ese bucket en Supabase Storage.
 
 Los reportes de cierre se generan en el servidor y se guardan en ese bucket privado. Para compartirlos configura `NEXT_PUBLIC_SUPABASE_BUCKET` y `SUPABASE_SERVICE_ROLE_KEY`; los enlaces de descarga compartidos vencen en 24 horas. `OWNER_WHATSAPP_NUMBER` (formato internacional, solo dígitos) habilita el acceso directo a WhatsApp del dueño, y `BUSINESS_NAME` / `BUSINESS_BRANCH` personalizan el encabezado PDF. Las ventas del POS requieren una caja abierta y quedan asociadas a su turno en la misma transacción.
+
+El escáner remoto de códigos de barras se habilita con la variable de servidor `REMOTE_SCANNER_ENABLED=true`. Configúrala en el entorno de despliegue (y en `.env` para desarrollo local); al quedar desactivada, el control no se muestra en POS o Inventario y la ruta móvil no está disponible.
 
 ## Nota sobre la base de datos
 

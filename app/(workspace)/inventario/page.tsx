@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatMoney } from "@/lib/locale";
 import { isAllowed } from "@/lib/auth-helpers";
 import { requirePagePermission } from "@/lib/require-page-permission";
+import { isRemoteScannerEnabled } from "@/lib/remote-scanner-config";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inventario" };
 const PAGE_SIZE = 30;
@@ -103,9 +104,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {process.env.NEXT_PUBLIC_ENABLE_REMOTE_SCANNER === "true" &&
+          {isRemoteScannerEnabled() &&
             (isAllowed(user.role, "pos:read") || isAllowed(user.role, "inventory:read")) && (
-              <RemoteScannerModal mode="inventory" />
+              <RemoteScannerModal mode="inventory" enabled />
             )}
           {canManageInventory && (
             <>

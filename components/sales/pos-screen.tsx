@@ -79,12 +79,14 @@ export function PosScreen({
   salesPage,
   salesPageCount,
   canManageSales,
+  scannerEnabled,
 }: {
   initialProducts: Product[];
   sales: Sale[];
   salesPage: number;
   salesPageCount: number;
   canManageSales: boolean;
+  scannerEnabled: boolean;
 }) {
   const [products, setProducts] = useState(initialProducts);
   const [term, setTerm] = useState("");
@@ -204,7 +206,7 @@ export function PosScreen({
                   className="h-11 rounded-xl pl-9"
                 />
               </div>
-              <RemoteScannerModal mode="pos" onFound={addScanned} />
+              <RemoteScannerModal mode="pos" enabled={scannerEnabled} onFound={addScanned} />
             </div>
           </div>
         </CardHeader>

@@ -19,14 +19,15 @@ import { useRemoteScannerPc } from "@/hooks/use-remote-scanner-pc";
 import type { ScannedProduct } from "@/lib/actions/commerce";
 
 type Props =
-  | { mode: "inventory"; onFound?: never }
+  | { mode: "inventory"; enabled: true; onFound?: never }
   | {
       mode: "pos";
+      enabled: boolean;
       onFound: (product: ScannedProduct) => "ok" | "sin_stock" | Promise<"ok" | "sin_stock">;
     };
 
 export function RemoteScannerModal(props: Props) {
-  if (process.env.NEXT_PUBLIC_ENABLE_REMOTE_SCANNER !== "true") return null;
+  if (!props.enabled) return null;
   return <EnabledRemoteScannerModal {...props} />;
 }
 
@@ -51,17 +52,19 @@ function EnabledRemoteScannerModal(props: Props) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" className="h-11 rounded-xl">
-          <Smartphone />
-          <span className="hidden sm:inline">Vincular escáner móvil</span>
-          <span className="sm:hidden">Escáner</span>
+        <Button type="button" variant="outline" className="h-11 shrink-0 rounded-xl px-3 sm:px-4">
+          <Smartphone aria-hidden="true" />
+          <span className="text-xs sm:text-sm">Escanear</span>
+          <span className="sr-only"> productos con el celular</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="display-heading text-2xl">Vincular escáner móvil</DialogTitle>
+          <DialogTitle className="display-heading text-2xl">
+            Escanear productos con tu celular
+          </DialogTitle>
           <DialogDescription>
-            Abre la cámara en tu celular y escanea este código QR.
+            Vincula tu celular con este código QR; cada producto escaneado se agregará al carrito.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col items-center gap-4 py-2">

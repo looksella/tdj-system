@@ -15,35 +15,23 @@ import { ThemeToggle } from "@/components/theme-toggle";
  */
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="relative w-full">
+    <main className="relative grid min-h-[100svh] w-full place-items-center px-4 py-10 sm:py-12">
       <AuthBackdrop />
       <ThemeToggle />
 
-      {/* `pt-16` en móvil deja libre la esquina del botón de tema. */}
-      <div className="mx-auto flex w-full max-w-3xl items-end justify-center pt-16 lg:pt-0">
-        <div className="pointer-events-none relative z-20 -mr-10 hidden h-[70vh] w-[clamp(220px,28vw,360px)] lg:block">
-          <Image
-            src="/don-juan-mascota.png"
-            alt="Don Juan, mascota de la tienda"
-            fill
-            sizes="(min-width: 1024px) 28vw, 1px"
-            className="object-contain object-bottom drop-shadow-[0_24px_38px_rgba(4,18,12,0.45)]"
-          />
-        </div>
-
-        <div className="tdj-glow relative z-10 w-full max-w-md shadow-[0_36px_80px_-32px_rgba(4,18,12,0.6)]">
-          <div className="rounded-[calc(1.5rem-1.5px)] border border-white/40 bg-white/80 p-6 backdrop-blur-xl sm:p-8 dark:border-white/10 dark:bg-slate-950/70">
-            <div className="relative mx-auto mb-4 h-24 w-24 lg:hidden">
-              <Image
-                src="/don-juan-mascota.png"
-                alt="Don Juan, mascota de la tienda"
-                fill
-                sizes="96px"
-                className="object-contain object-bottom drop-shadow-lg"
-              />
-            </div>
-            {children}
+      <div className="tdj-glow relative z-10 w-full max-w-md rounded-3xl shadow-[0_36px_80px_-32px_rgba(4,18,12,0.6)]">
+        <div className="rounded-[calc(1.5rem-1.5px)] border border-white/60 bg-white/90 p-6 backdrop-blur-xl sm:p-8 dark:border-white/10 dark:bg-slate-950/85">
+          <div className="mx-auto mb-3 h-28 w-24 sm:h-32 sm:w-28">
+            <Image
+              src="/don-juan-mascota.png"
+              alt="Don Juan, mascota de la tienda"
+              width={1024}
+              height={1536}
+              priority
+              className="h-full w-full object-contain drop-shadow-lg"
+            />
           </div>
+          {children}
         </div>
       </div>
     </main>
