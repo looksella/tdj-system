@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["192.168.1.4"],
   // Las imágenes se sirven tal cual, sin el optimizador de Vercel. Motivo: en la
   // versión publicada `next/image` no baja la foto desde el navegador, la pide
   // el optimizador por su cuenta y SIN la sesión del usuario. Toda imagen que

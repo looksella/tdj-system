@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isInvalidRefreshToken, isSupabaseSessionCookie } from "@/lib/supabase/refresh-token";
 /**
  * Rutas que no piden sesión. Arranca SOLO con las de auth y los tres archivos
  * de la PWA: el default es "todo protegido", y abrir una ruta al público es
@@ -110,6 +111,7 @@ export async function proxy(request: NextRequest) {
   const csp = crearCsp(nonce);
   const crearHeadersDeRequest = () => {
     const headers = new Headers(request.headers);
+    headers.set("x-nonce", nonce);
     headers.set("Content-Security-Policy", csp);
     return headers;
   };
@@ -149,7 +151,30 @@ export async function proxy(request: NextRequest) {
   // getUser() y no getSession(): verifica el JWT contra Supabase.
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+  if (isInvalidRefreshToken(error)) {
+    const response = isPublicPath
+      ? supabaseResponse
+      : (() => {
+          const url = request.nextUrl.clone();
+          url.pathname = "/sign-in";
+          url.searchParams.set("redirect_url", request.nextUrl.pathname);
+          return NextResponse.redirect(url);
+        })();
+    for (const { name } of request.cookies.getAll()) {
+      if (isSupabaseSessionCookie(name)) {
+        response.cookies.set(name, "", {
+          path: "/",
+          maxAge: 0,
+          expires: new Date(0),
+          sameSite: "lax",
+          secure: request.nextUrl.protocol === "https:",
+        });
+      }
+    }
+    return agregarHeadersDeSeguridad(response, csp);
+  }
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";

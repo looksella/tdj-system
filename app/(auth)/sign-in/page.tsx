@@ -1,8 +1,7 @@
+import { AuthShell } from "@/components/auth/auth-shell";
 import { LoginInactivo } from "@/components/auth/login-inactivo";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { LOGIN_ACTIVO } from "@/lib/supabase/estado";
-
-const TITULO_BIENVENIDA = "Bienvenido al Sistema de la Tienda Don Juan";
 
 function rutaInterna(valor: string | undefined): string | null {
   if (!valor || !valor.startsWith("/") || valor.startsWith("//") || valor.includes("\\")) {
@@ -26,7 +25,11 @@ export default async function SignInPage({
   searchParams: Promise<{ redirect_url?: string | string[] }>;
 }) {
   if (!LOGIN_ACTIVO) {
-    return <LoginInactivo titulo={TITULO_BIENVENIDA} />;
+    return (
+      <AuthShell>
+        <LoginInactivo />
+      </AuthShell>
+    );
   }
 
   const params = await searchParams;
@@ -34,6 +37,10 @@ export default async function SignInPage({
     ? params.redirect_url[0]
     : params.redirect_url;
 
-  return <SignInForm redirectUrl={rutaInterna(redirectParam)} />;
+  return (
+    <AuthShell>
+      <SignInForm redirectUrl={rutaInterna(redirectParam)} />
+    </AuthShell>
+  );
 }
 export const metadata = { title: "Iniciar sesión" };

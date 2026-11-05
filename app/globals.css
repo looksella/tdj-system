@@ -152,3 +152,113 @@
     box-shadow: var(--shadow);
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Login de la Tienda Don Juan: luz giratoria, marquesina y sol del atardecer.
+ * Adaptado del efecto "CTA animation" de Cruip a la paleta verde/ámbar del
+ * sistema. Todo el movimiento respeta `prefers-reduced-motion`.
+ * ------------------------------------------------------------------------- */
+:root {
+  --glow-a: #f59e0b; /* ámbar */
+  --glow-b: #34d399; /* verde claro */
+  --glow-opacity: 0.55;
+}
+
+.dark {
+  --glow-a: #fbbf24;
+  --glow-b: #6ee7b7;
+  --glow-opacity: 1;
+}
+
+@keyframes tdj-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes tdj-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes tdj-sun {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.tdj-glow {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 1.5px;
+  border-radius: 1.5rem;
+}
+.tdj-glow::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 200%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 55%,
+    var(--glow-a) 70%,
+    var(--glow-b) 85%,
+    transparent 100%
+  );
+  opacity: var(--glow-opacity);
+  animation: tdj-spin 5s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tdj-glow::before {
+    animation: none;
+    opacity: 0.4;
+  }
+  .tdj-marquee,
+  .tdj-sun {
+    animation: none !important;
+  }
+}
+
+/* Misma luz para el botón "Ingresar": 3 s y apagada hasta que el mouse entra
+ * o el foco de teclado llega (`.tdj-glow` ya define posición y recorte). */
+.tdj-glow-boton {
+  padding: 3px;
+  border-radius: 0.75rem;
+}
+.tdj-glow-boton::before {
+  animation-duration: 3s;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.tdj-glow-boton:hover::before,
+.tdj-glow-boton:focus-within::before {
+  opacity: var(--glow-opacity);
+}
+
+/* En táctil el :hover queda pegado después del toque: solo cuenta el foco. */
+@media (hover: none) {
+  .tdj-glow-boton:hover::before {
+    opacity: 0;
+  }
+  .tdj-glow-boton:focus-within::before {
+    opacity: var(--glow-opacity);
+  }
+}
+
+.tdj-marquee {
+  animation: tdj-marquee 6s linear infinite;
+}
+.tdj-sun {
+  animation: tdj-sun 8s ease-in-out infinite;
+}

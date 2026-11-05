@@ -37,6 +37,7 @@ import {
 import { isAllowed } from "@/lib/auth-helpers";
 import { signOut } from "@/lib/supabase/actions";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type NavItem = {
   id: string;
@@ -386,6 +387,7 @@ function SidebarPanel({
           <span>Asistente IA</span>
         </Link>
       )}
+      {variant === "desktop" && <ThemeToggle variant="sidebar" />}
       <form action={signOut} className="mt-3 shrink-0 border-t border-sidebar-border pt-3">
         <Button
           type="submit"
@@ -479,6 +481,7 @@ export function Sidebar({ role }: { role: string }) {
           </span>
         </Link>
         <div className="flex items-center gap-1">
+          <ThemeToggle variant="icon" />
           <form action={signOut}>
             <Button type="submit" variant="ghost" size="icon" aria-label="Cerrar sesión">
               <LogOut className="size-5" />
