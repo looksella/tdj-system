@@ -8,6 +8,10 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import {
+  getScannerCameraEnvironmentError,
+  getScannerCameraRequestError,
+} from "@/lib/scanner-camera";
+import {
   createScannerUuid,
   isScannerStatus,
   type ScannerResult,
@@ -271,7 +275,9 @@ export function RemoteScannerMobile() {
             });
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           setConnection("offline");
-          console.error(`[remote-scanner-mobile] no se pudo conectar al canal (${status}).`);
+          console.error(
+            `[remote-scanner-mobile] no se pudo conectar al canal (${status}). Revisa la conexión y la configuración de Supabase Realtime.`,
+          );
         }
       });
 
@@ -349,8 +355,23 @@ export function RemoteScannerMobile() {
     async (deviceId?: string) => {
       stopCamera();
       setCameraError(null);
+      const mediaDevices = navigator.mediaDevices;
+      const environmentError = getScannerCameraEnvironmentError(
+        window.isSecureContext,
+        typeof mediaDevices?.getUserMedia === "function",
+      );
+      if (environmentError) {
+        setCameraError(environmentError);
+        return;
+      }
+
+      if (!mediaDevices) {
+        setCameraError(getScannerCameraEnvironmentError(true, false));
+        return;
+      }
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const stream = await mediaDevices.getUserMedia({
           audio: false,
           video: deviceId
             ? { deviceId: { exact: deviceId } }
@@ -365,7 +386,7 @@ export function RemoteScannerMobile() {
         video.srcObject = stream;
         await video.play();
 
-        const availableDevices = await navigator.mediaDevices.enumerateDevices();
+        const availableDevices = await mediaDevices.enumerateDevices();
         const cameras = availableDevices.filter((device) => device.kind === "videoinput");
         setDevices(cameras);
         const track = stream.getVideoTracks()[0];
@@ -442,9 +463,7 @@ export function RemoteScannerMobile() {
       } catch (error) {
         console.error("[remote-scanner-mobile] no se pudo iniciar la cámara.", error);
         stopCamera();
-        setCameraError(
-          "No se pudo abrir la cámara. Revisa los permisos del navegador y vuelve a intentar.",
-        );
+        setCameraError(getScannerCameraRequestError(error));
       }
     },
     [publishScan, requestWakeLock, stopCamera],
@@ -547,6 +566,12 @@ export function RemoteScannerMobile() {
           Sesión finalizada
         </div>
       )}
+      {connection === "offline" && session && sessionReady && (
+        <p role="status" className="rounded-xl bg-amber-100 px-4 py-3 text-sm text-amber-950">
+          No hay conexión con la computadora. Revisa el Wi-Fi o los datos y vuelve a abrir el
+          escáner desde el código QR.
+        </p>
+      )}
       {cameraError && (
         <p role="alert" className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {cameraError}
@@ -634,7 +659,8 @@ export function RemoteScannerMobile() {
         )}
       </div>
       <p className="text-center text-xs text-muted-foreground">
-        Mantén el código dentro del recuadro. La cámara no funciona sin HTTPS.
+        Mantén el código dentro del recuadro. La cámara requiere HTTPS; las direcciones como
+        http://192.168.1.4 no permiten activarla.
       </p>
     </main>
   );
