@@ -7,8 +7,12 @@ export type FeatureCatalogEntry = {
   group: string;
   kind: FeatureKind;
   defaultEnabled: boolean;
+  /** Otras herramientas de las que depende. Apagar la base apaga la derivada. */
   dependsOn: string[];
+  /** Permisos que la herramienta necesita además del estado encendido. */
   permissions: string[];
+  /** Interruptor maestro por variable de entorno (solo escáner remoto). */
+  envGate?: { variable: string; value: string };
 };
 
 export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
@@ -19,7 +23,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "núcleo",
     kind: "core",
     defaultEnabled: true,
-    dependsOn: ["inventory:read"],
+    dependsOn: [],
     permissions: ["inventory:read"],
   },
   {
@@ -29,7 +33,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "núcleo",
     kind: "core",
     defaultEnabled: true,
-    dependsOn: ["pos:read"],
+    dependsOn: [],
     permissions: ["pos:read"],
   },
   {
@@ -39,7 +43,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "núcleo",
     kind: "core",
     defaultEnabled: true,
-    dependsOn: ["cash:operate"],
+    dependsOn: [],
     permissions: ["cash:operate"],
   },
   {
@@ -49,7 +53,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "núcleo",
     kind: "core",
     defaultEnabled: true,
-    dependsOn: ["settings:manage"],
+    dependsOn: [],
     permissions: ["settings:manage"],
   },
   {
@@ -69,7 +73,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "compras",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["purchases:manage"],
+    dependsOn: [],
     permissions: ["purchases:manage"],
   },
   {
@@ -79,7 +83,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "compras",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["purchases:manage"],
+    dependsOn: ["purchases"],
     permissions: ["purchases:manage"],
   },
   {
@@ -89,7 +93,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "compras",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["purchases:manage"],
+    dependsOn: ["purchases"],
     permissions: ["purchases:manage"],
   },
   {
@@ -99,7 +103,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "compras",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["suppliers:manage"],
+    dependsOn: [],
     permissions: ["suppliers:manage"],
   },
   {
@@ -109,7 +113,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "compras",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["suppliers:manage"],
+    dependsOn: ["suppliers"],
     permissions: ["suppliers:manage"],
   },
   {
@@ -119,7 +123,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "ventas",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["customers:manage"],
+    dependsOn: [],
     permissions: ["customers:manage"],
   },
   {
@@ -129,7 +133,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "analisis",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["reports:read"],
+    dependsOn: [],
     permissions: ["reports:read"],
   },
   {
@@ -139,8 +143,9 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "inventario",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["inventory:read"],
+    dependsOn: [],
     permissions: ["inventory:read"],
+    envGate: { variable: "NEXT_PUBLIC_ENABLE_REMOTE_SCANNER", value: "true" },
   },
   {
     key: "pos-discounts",
@@ -149,8 +154,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "ventas",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["sales:create"],
-    permissions: ["sales:create"],
+    dependsOn: [],
+    permissions: ["sales:discount"],
   },
   {
     key: "delete-products",
@@ -159,8 +164,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "inventario",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["inventory:manage"],
-    permissions: ["inventory:manage"],
+    dependsOn: [],
+    permissions: ["inventory:delete"],
   },
   {
     key: "manual-stock-adjustment",
@@ -169,8 +174,8 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "inventario",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["inventory:manage"],
-    permissions: ["inventory:manage"],
+    dependsOn: [],
+    permissions: ["inventory:adjust"],
   },
   {
     key: "attendance",
@@ -179,7 +184,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "equipo",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["attendance:punch"],
+    dependsOn: [],
     permissions: ["attendance:punch"],
   },
   {
@@ -189,7 +194,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     group: "equipo",
     kind: "optional",
     defaultEnabled: true,
-    dependsOn: ["payroll:manage"],
+    dependsOn: [],
     permissions: ["payroll:manage"],
   },
   {
@@ -198,38 +203,20 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     description: "Bloquea la apertura de caja si la persona no registró su entrada.",
     group: "caja",
     kind: "optional",
-    defaultEnabled: false,
-    dependsOn: ["cash:operate", "attendance:punch"],
+    // Abrir caja ya exigía marcaje antes de este interruptor: encendido = como hoy.
+    defaultEnabled: true,
+    dependsOn: ["attendance"],
     permissions: ["cash:operate", "attendance:punch"],
   },
 ];
 
 export const FEATURE_BY_KEY = new Map(FEATURE_CATALOG.map((feature) => [feature.key, feature]));
+export const FEATURE_KEYS = FEATURE_CATALOG.map((feature) => feature.key);
 
-export function isFeatureEnabled(featureKey: string, userRole?: string | null): boolean {
-  const feature = FEATURE_BY_KEY.get(featureKey);
-  if (!feature) return false;
-  if (feature.kind === "core") return feature.defaultEnabled;
+export function getDefaultFeatureStates(): Map<string, boolean> {
+  return new Map(FEATURE_CATALOG.map((feature) => [feature.key, feature.defaultEnabled]));
+}
 
-  if (
-    feature.key === "remote-scanner-mobile" &&
-    process.env.NEXT_PUBLIC_ENABLE_REMOTE_SCANNER !== undefined &&
-    process.env.NEXT_PUBLIC_ENABLE_REMOTE_SCANNER !== "true"
-  ) {
-    return false;
-  }
-
-  if (process.env.PERMISSIONS_OVERRIDES_DISABLED === "true") {
-    return feature.defaultEnabled;
-  }
-
-  if (userRole && feature.permissions.length > 0) {
-    return feature.permissions.every((permission) => {
-      const role = String(userRole).trim().toLowerCase();
-      if (role === "admin" || role === "developer") return true;
-      return permission !== "";
-    });
-  }
-
-  return feature.defaultEnabled;
+export function getFeatureDependents(featureKey: string): FeatureCatalogEntry[] {
+  return FEATURE_CATALOG.filter((feature) => feature.dependsOn.includes(featureKey));
 }
