@@ -8,6 +8,15 @@ export type PermissionCatalogEntry = {
   defaultRoles: readonly string[];
 };
 
+/**
+ * Única fuente de verdad de los permisos.
+ *
+ * `defaultRoles` reproduce exactamente lo que cada rol podía hacer antes de
+ * existir los overrides (ver `scripts/check-permissions-parity.ts`). Las claves
+ * finas (`inventory:adjust`, `inventory:delete`, `sales:discount`, `sales:void`)
+ * heredan del permiso grande que las habilitaba: quien podía ajustar inventario
+ * sigue pudiendo, y quien podía vender sigue pudiendo descontar.
+ */
 export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
   {
     key: "dashboard:read",
@@ -30,10 +39,28 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
   {
     key: "inventory:manage",
     label: "Inventario (gestión)",
-    description: "Crear, editar, retirar y ajustar inventario.",
+    description: "Crear, editar y retirar productos del inventario.",
     group: "inventario",
     sensitive: true,
     dependsOn: ["inventory:read"],
+    defaultRoles: ["admin", "developer"],
+  },
+  {
+    key: "inventory:adjust",
+    label: "Ajustar existencias",
+    description: "Corregir manualmente el stock de un producto.",
+    group: "inventario",
+    sensitive: true,
+    dependsOn: ["inventory:manage"],
+    defaultRoles: ["admin", "developer"],
+  },
+  {
+    key: "inventory:delete",
+    label: "Eliminar productos",
+    description: "Borrar definitivamente un producto del catálogo.",
+    group: "inventario",
+    sensitive: true,
+    dependsOn: ["inventory:manage"],
     defaultRoles: ["admin", "developer"],
   },
   {
@@ -55,6 +82,33 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
     defaultRoles: ["employee", "admin", "developer"],
   },
   {
+    key: "sales:discount",
+    label: "Aplicar descuentos",
+    description: "Descontar importes sobre una venta del mostrador.",
+    group: "ventas",
+    sensitive: true,
+    dependsOn: ["sales:create"],
+    defaultRoles: ["employee", "admin", "developer"],
+  },
+  {
+    key: "sales:manage",
+    label: "Administrar ventas",
+    description: "Cambiar la forma de pago de una venta registrada.",
+    group: "ventas",
+    sensitive: true,
+    dependsOn: ["pos:read"],
+    defaultRoles: ["admin", "developer"],
+  },
+  {
+    key: "sales:void",
+    label: "Anular ventas",
+    description: "Anular una venta y devolver el stock al inventario.",
+    group: "ventas",
+    sensitive: true,
+    dependsOn: ["sales:manage"],
+    defaultRoles: ["admin", "developer"],
+  },
+  {
     key: "cash:operate",
     label: "Operar caja",
     description: "Abrir, cerrar y operar la caja del turno.",
@@ -62,6 +116,15 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
     sensitive: true,
     dependsOn: ["pos:read"],
     defaultRoles: ["employee", "admin", "developer"],
+  },
+  {
+    key: "cash:manage",
+    label: "Administración de caja",
+    description: "Cerrar caja y generar el reporte del turno.",
+    group: "caja",
+    sensitive: true,
+    dependsOn: ["cash:operate"],
+    defaultRoles: ["admin", "developer"],
   },
   {
     key: "customers:manage",
@@ -163,9 +226,18 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
     defaultRoles: ["admin", "developer"],
   },
   {
+    key: "assistant:access",
+    label: "Asistente",
+    description: "Usar el asistente del negocio y el extractor de documentos.",
+    group: "analisis",
+    sensitive: false,
+    dependsOn: ["dashboard:read"],
+    defaultRoles: ["admin", "developer"],
+  },
+  {
     key: "settings:manage",
     label: "Configuración",
-    description: "Administrar ajustes globales del sistema.",
+    description: "Administrar ajustes globales y permisos del sistema.",
     group: "configuracion",
     sensitive: true,
     dependsOn: [],
@@ -192,6 +264,10 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
 ];
 
 export const PERMISSION_KEYS = PERMISSION_CATALOG.map((permission) => permission.key);
+
+export const PERMISSION_BY_KEY = new Map(
+  PERMISSION_CATALOG.map((permission) => [permission.key, permission]),
+);
 
 export function getDefaultPermissionsForRole(role: string | null | undefined): Set<string> {
   const normalizedRole = (role ?? "").trim().toLowerCase();
