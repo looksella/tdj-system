@@ -13,13 +13,16 @@ import {
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/locale";
 import { requireFeature } from "@/lib/features/resolve";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Compras y abastecimiento" };
 export default async function PurchasesPage() {
-  await requirePagePermission("purchases:manage");
+  const user = await requirePagePermission("purchases:manage");
   await requireFeature("purchases");
-  const [purchases, products] = await Promise.all([
+  const permissions = await getEffectivePermissions(user);
+  const canCreateProduct = hasPermission(permissions, "inventory:manage");
+  const [purchases, products, categories] = await Promise.all([
     db.compra.findMany({
       orderBy: { purchasedAt: "desc" },
       take: 50,
@@ -30,6 +33,10 @@ export default async function PurchasesPage() {
       orderBy: { name: "asc" },
       take: 1200,
       select: { id: true, sku: true, name: true, purchasePrice: true },
+    }),
+    db.categoria.findMany({
+      orderBy: { categoryName: "asc" },
+      select: { id: true, categoryName: true },
     }),
   ]);
   const totalPurchased = purchases.reduce((sum, purchase) => sum + purchase.total.toNumber(), 0);
@@ -55,7 +62,11 @@ export default async function PurchasesPage() {
             Registra lo que recibes, conserva el historial y actualiza existencias en un solo paso.
           </p>
         </div>
-        <PurchaseDialog products={productOptions} />
+        <PurchaseDialog
+          products={productOptions}
+          categories={categories}
+          canCreateProduct={canCreateProduct}
+        />
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="panel-shadow border-border/80">
@@ -154,7 +165,12 @@ export default async function PurchasesPage() {
                         {formatMoney(purchase.total.toNumber())}
                       </TableCell>
                       <TableCell>
-                        <PurchaseDialog products={productOptions} purchase={editable} />
+                        <PurchaseDialog
+                          products={productOptions}
+                          categories={categories}
+                          canCreateProduct={canCreateProduct}
+                          purchase={editable}
+                        />
                       </TableCell>
                     </TableRow>
                   );

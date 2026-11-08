@@ -156,7 +156,15 @@ export async function suggestProductSku(categoryId: string) {
   }
 }
 
-export async function createProduct(formData: FormData) {
+type CreateProductResult =
+  | {
+      ok: true;
+      message: string;
+      product: { id: string; sku: string; name: string; purchasePrice: string };
+    }
+  | { ok: false; message: string };
+
+export async function createProduct(formData: FormData): Promise<CreateProductResult> {
   const authorization = await autorizarAccion("inventory:manage");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
   const actorId = authorization.usuario.id;
@@ -168,9 +176,15 @@ export async function createProduct(formData: FormData) {
     }
     const categoryId = text(formData.get("categoryId"));
     let sku = "";
+    let createdProduct: {
+      id: string;
+      sku: string;
+      name: string;
+      purchasePrice: string;
+    } | null = null;
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
-        sku = await db.$transaction(async (tx) => {
+        const created = await db.$transaction(async (tx) => {
           const generatedSku = await nextProductSku(tx, categoryId);
           const input = productInput(formData, generatedSku);
           await rejectBarcodeSkuCollision(tx, input.barcode);
@@ -194,8 +208,18 @@ export async function createProduct(formData: FormData) {
               },
             });
           }
-          return generatedSku;
+          return {
+            sku: generatedSku,
+            product: {
+              id: product.id,
+              sku: product.sku,
+              name: product.name,
+              purchasePrice: product.purchasePrice.toString(),
+            },
+          };
         });
+        sku = created.sku;
+        createdProduct = created.product;
         break;
       } catch (error) {
         const isSkuCollision =
@@ -205,15 +229,22 @@ export async function createProduct(formData: FormData) {
         if (!isSkuCollision || attempt === 4) throw error;
       }
     }
+    if (!createdProduct) throw new Error("No se pudo guardar el producto.");
+    const savedProduct = createdProduct;
     revalidatePath("/inventario");
+    revalidatePath("/compras");
     revalidatePath("/");
-    return { ok: true, message: `Producto agregado al inventario con el código ${sku}.` };
+    return {
+      ok: true,
+      message: `Producto agregado al inventario con el código ${sku}.`,
+      product: savedProduct,
+    };
   } catch (error) {
     if (uniqueViolationIncludes(error, "barcode")) {
-      return { ok: false, message: "Ese código de barras ya pertenece a otro producto." };
+      return { ok: false as const, message: "Ese código de barras ya pertenece a otro producto." };
     }
     return {
-      ok: false,
+      ok: false as const,
       message: error instanceof Error ? error.message : "No se pudo guardar el producto.",
     };
   }
