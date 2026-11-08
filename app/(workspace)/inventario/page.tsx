@@ -6,7 +6,8 @@ import { ProductDialog } from "@/components/inventory/product-dialog";
 import { RemoteScannerModal } from "@/components/scanner/remote-scanner-modal";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatMoney } from "@/lib/locale";
-import { isAllowed } from "@/lib/auth-helpers";
+import { isFeatureEnabled } from "@/lib/features/resolve";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 import { isRemoteScannerEnabled } from "@/lib/remote-scanner-config";
 export const dynamic = "force-dynamic";
@@ -46,7 +47,10 @@ const SORT_COLUMNS = {
 } as const;
 export default async function InventoryPage({ searchParams }: { searchParams: SearchParams }) {
   const user = await requirePagePermission("inventory:read");
-  const canManageInventory = isAllowed(user.role, "inventory:manage");
+  const permissions = await getEffectivePermissions(user);
+  const canManageInventory = hasPermission(permissions, "inventory:manage");
+  const scannerEnabled =
+    isRemoteScannerEnabled() && (await isFeatureEnabled("remote-scanner-mobile"));
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
   const search = (params.q ?? "").trim().slice(0, 80);
@@ -104,8 +108,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {isRemoteScannerEnabled() &&
-            (isAllowed(user.role, "pos:read") || isAllowed(user.role, "inventory:read")) && (
+          {scannerEnabled &&
+            (hasPermission(permissions, "pos:read") ||
+              hasPermission(permissions, "inventory:read")) && (
               <RemoteScannerModal mode="inventory" enabled />
             )}
           {canManageInventory && (

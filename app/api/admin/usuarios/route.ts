@@ -1,5 +1,6 @@
 import { createClient, type User } from "@supabase/supabase-js";
-import { INVITABLE_ROLES, isAllowed } from "@/lib/auth-helpers";
+import { INVITABLE_ROLES } from "@/lib/auth-helpers";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { at } from "@/lib/auth-textos";
 import { LOGIN_ACTIVO } from "@/lib/supabase/estado";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
@@ -33,7 +34,7 @@ async function requireUserManager(): Promise<Response | null> {
   const inactivo = loginInactivo();
   if (inactivo) return inactivo;
   const user = await getEffectiveUser();
-  if (!user || !isAllowed(user.role, "users:manage")) {
+  if (!user || !hasPermission(await getEffectivePermissions(user), "users:manage")) {
     return new Response("Forbidden", { status: 403 });
   }
   return null;

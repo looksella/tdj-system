@@ -11,12 +11,14 @@ import {
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/locale";
+import { requireFeature } from "@/lib/features/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Reportes" };
 const DAYS_TO_REVIEW = 30;
 export default async function ReportsPage() {
   await requirePagePermission("reports:read");
+  await requireFeature("reports");
   const since = new Date(Date.now() - DAYS_TO_REVIEW * 24 * 60 * 60 * 1000);
   const [sales, saleLines, lowStock, inventory, categoryPerformance] = await Promise.all([
     db.venta.findMany({

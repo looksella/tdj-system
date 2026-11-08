@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { isAllowed } from "@/lib/auth-helpers";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { db } from "@/lib/db";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
 
@@ -22,7 +22,8 @@ function csvCell(value: unknown): string {
 
 export async function GET(request: Request) {
   const user = await getEffectiveUser();
-  if (!user || !isAllowed(user.role, "inventory:read")) {
+  const permissions = await getEffectivePermissions(user);
+  if (!user || !hasPermission(permissions, "inventory:read")) {
     return new Response("Forbidden", { status: 403 });
   }
 
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
     : "producto";
   const orderBy = params.get("direccion") === "desc" ? Prisma.sql`DESC` : Prisma.sql`ASC`;
   const filters = Prisma.sql`
-    ${isAllowed(user.role, "inventory:manage") ? Prisma.empty : Prisma.sql`AND p.is_active = true`}
+    ${hasPermission(permissions, "inventory:manage") ? Prisma.empty : Prisma.sql`AND p.is_active = true`}
     ${search ? Prisma.sql`AND (p.name ILIKE ${`%${search}%`} OR p.sku ILIKE ${`%${search}%`} OR p.barcode ILIKE ${`%${search}%`})` : Prisma.empty}
     ${categoryId ? Prisma.sql`AND p.category_id = ${categoryId}::uuid` : Prisma.empty}
     ${lowOnly ? Prisma.sql`AND p.current_stock <= p.min_stock` : Prisma.empty}

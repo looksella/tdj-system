@@ -1,5 +1,5 @@
 import { at } from "@/lib/auth-textos";
-import { isAllowed } from "@/lib/auth-helpers";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { createClient } from "@supabase/supabase-js";
 import { LOGIN_ACTIVO } from "@/lib/supabase/estado";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   const inactivo = loginInactivo();
   if (inactivo) return inactivo;
   const user = await getEffectiveUser();
-  if (!user || !isAllowed(user.role, "users:manage")) {
+  if (!user || !hasPermission(await getEffectivePermissions(user), "users:manage")) {
     return new Response("Forbidden", { status: 403 });
   }
   const { email } = await request.json();

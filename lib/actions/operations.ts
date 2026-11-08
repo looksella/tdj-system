@@ -20,6 +20,7 @@ import { storeCashReport } from "@/lib/cash-report";
 import { cents, lockCashOperations } from "@/lib/caja";
 import { db } from "@/lib/db";
 import { urlFirmada } from "@/lib/beon-storage";
+import { isFeatureEnabled } from "@/lib/features/resolve";
 import { guardAccion } from "@/lib/guard-autorizacion";
 import { TIMEZONE } from "@/lib/locale";
 import {
@@ -118,15 +119,19 @@ export async function openCash(form: FormData) {
     month: "2-digit",
     day: "2-digit",
   }).format(now);
-  const entryMark = await db.attendanceMark.findFirst({
-    where: {
-      employeeId,
-      type: "ENTRY",
-      markedAt: { gte: new Date(`${day}T00:00:00-06:00`), lte: now },
-    },
-    orderBy: { markedAt: "asc" },
-  });
-  if (!entryMark) throw new Error("Primero registra la entrada de la persona con su PIN.");
+  const requiereAsistencia = await isFeatureEnabled("require-attendance-to-open-cash");
+  const entryMark = requiereAsistencia
+    ? await db.attendanceMark.findFirst({
+        where: {
+          employeeId,
+          type: "ENTRY",
+          markedAt: { gte: new Date(`${day}T00:00:00-06:00`), lte: now },
+        },
+        orderBy: { markedAt: "asc" },
+      })
+    : null;
+  if (requiereAsistencia && !entryMark)
+    throw new Error("Primero registra la entrada de la persona con su PIN.");
   await db.$transaction(async (tx) => {
     await lockCashOperations(tx);
     if (await tx.cashSession.count({ where: { status: "OPEN" } }))
@@ -139,7 +144,7 @@ export async function openCash(form: FormData) {
     await tx.cashSession.create({
       data: {
         employeeId,
-        openingMarkId: entryMark.id,
+        openingMarkId: entryMark?.id ?? null,
         openingFloat: opening.total,
         openingDenominations: opening.counts,
         openedAt: new Date(),
@@ -220,17 +225,15 @@ export async function closeCash(form: FormData) {
         "La caja cambió mientras se intentaba cerrar. Actualiza e inténtalo de nuevo.",
       );
   });
-  let reportError: string | null = null;
   try {
     await storeCashReport(sessionId);
   } catch (error) {
-    reportError = error instanceof Error ? error.message : "Error desconocido al generar el PDF.";
+    console.warn(
+      "[closeCash] No se pudo guardar el PDF del cierre, pero la caja quedó cerrada.",
+      error,
+    );
   }
   refresh("/", "/caja");
-  if (reportError)
-    throw new Error(
-      `La caja quedó cerrada, pero no se pudo guardar el reporte PDF: ${reportError}`,
-    );
 }
 
 export async function addCashMovement(form: FormData) {

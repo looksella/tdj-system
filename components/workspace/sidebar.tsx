@@ -35,7 +35,6 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { isAllowed } from "@/lib/auth-helpers";
 import { signOut } from "@/lib/supabase/actions";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -46,6 +45,8 @@ type NavItem = {
   href: string;
   icon: LucideIcon;
   permission: string;
+  /** Herramienta que debe estar encendida para mostrar el acceso. */
+  feature?: string;
 };
 
 const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
@@ -60,14 +61,23 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/ventas",
         icon: Store,
         permission: "pos:read",
+        feature: "pos",
       },
-      { id: "caja", label: "Caja", href: "/caja", icon: Vault, permission: "cash:operate" },
+      {
+        id: "caja",
+        label: "Caja",
+        href: "/caja",
+        icon: Vault,
+        permission: "cash:operate",
+        feature: "cash",
+      },
       {
         id: "clientes",
         label: "Clientes",
         href: "/clientes",
         icon: Users,
         permission: "customers:manage",
+        feature: "customers",
       },
       {
         id: "dte",
@@ -88,6 +98,7 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/inventario",
         icon: Package,
         permission: "inventory:read",
+        feature: "inventory",
       },
       {
         id: "comparar-precios",
@@ -115,6 +126,7 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/compras",
         icon: ShoppingCart,
         permission: "purchases:manage",
+        feature: "purchases",
       },
       {
         id: "proveedores",
@@ -122,6 +134,7 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/proveedores",
         icon: Truck,
         permission: "suppliers:manage",
+        feature: "suppliers",
       },
     ],
   },
@@ -142,6 +155,7 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/configuracion",
         icon: Settings,
         permission: "settings:manage",
+        feature: "settings",
       },
       {
         id: "asistencia",
@@ -149,6 +163,7 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/asistencia",
         icon: Clock3,
         permission: "attendance:punch",
+        feature: "attendance",
       },
       {
         id: "planilla",
@@ -156,6 +171,7 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/planilla",
         icon: ClipboardList,
         permission: "payroll:manage",
+        feature: "payroll",
       },
     ],
   },
@@ -169,6 +185,7 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/reportes",
         icon: BarChart3,
         permission: "reports:read",
+        feature: "reports",
       },
     ],
   },
@@ -192,7 +209,8 @@ function getSectionForPath(pathname: string) {
 }
 
 function SidebarPanel({
-  role,
+  permissions,
+  features,
   pathname,
   activeSection,
   onSectionChange,
@@ -204,7 +222,8 @@ function SidebarPanel({
   closeButton,
   variant,
 }: {
-  role: string;
+  permissions: string[];
+  features: string[];
   pathname: string;
   activeSection: string | null;
   onSectionChange: (section: string | null) => void;
@@ -216,15 +235,19 @@ function SidebarPanel({
   closeButton?: ReactNode;
   variant: "desktop" | "mobile";
 }) {
+  const can = (permission: string) => permissions.includes("*") || permissions.includes(permission);
+  const canSee = (item: NavItem) =>
+    can(item.permission) && (!item.feature || features.includes(item.feature));
+
   const visibleSections = navigationSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => isAllowed(role, item.permission)),
+      items: section.items.filter(canSee),
     }))
     .filter((section) => section.items.length > 0);
   const favoriteItems = favorites
     .map((id) => allItems.find((item) => item.id === id))
-    .filter((item): item is NavItem => Boolean(item && isAllowed(role, item.permission)));
+    .filter((item): item is NavItem => Boolean(item && canSee(item)));
 
   function renderItems(items: NavItem[], sectionId: string, isOpen: boolean) {
     return items.map(({ id, label, href, icon: Icon }, index) => {
@@ -355,7 +378,7 @@ function SidebarPanel({
     <div className="flex h-full min-h-0 flex-col border-sidebar-border bg-sidebar px-4 py-5 text-sidebar-foreground md:px-5">
       <div className="mb-5 flex shrink-0 items-center gap-3 px-2">
         <Link
-          href={isAllowed(role, "dashboard:read") ? "/" : "/ventas"}
+          href={can("dashboard:read") ? "/" : "/ventas"}
           prefetch={false}
           onClick={onNavigate}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -381,7 +404,7 @@ function SidebarPanel({
         {visibleSections.map((section) => renderSection(section.id, section.label, section.items))}
       </nav>
 
-      {isAllowed(role, "assistant:access") && (
+      {can("assistant:access") && (
         <Link
           href="/asistente"
           prefetch={false}
@@ -410,7 +433,8 @@ function SidebarPanel({
   );
 }
 
-export function Sidebar({ role }: { role: string }) {
+export function Sidebar({ permissions, features }: { permissions: string[]; features: string[] }) {
+  const can = (permission: string) => permissions.includes("*") || permissions.includes(permission);
   const pathname = usePathname();
   const [activeSection, setActiveSection] = useState<string | null>(() =>
     getSectionForPath(pathname),
@@ -457,7 +481,8 @@ export function Sidebar({ role }: { role: string }) {
   }
 
   const panelProps = {
-    role,
+    permissions,
+    features,
     pathname,
     activeSection,
     onSectionChange: setActiveSection,
@@ -476,7 +501,7 @@ export function Sidebar({ role }: { role: string }) {
 
       <div className="flex min-h-16 items-center justify-between border-b border-sidebar-border bg-sidebar px-4 py-2 text-sidebar-foreground md:hidden">
         <Link
-          href={isAllowed(role, "dashboard:read") ? "/" : "/ventas"}
+          href={can("dashboard:read") ? "/" : "/ventas"}
           prefetch={false}
           className="flex items-center gap-2.5"
         >

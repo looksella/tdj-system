@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { entornoActual, preguntar } from "@/lib/beon-asistente";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
-import { isAllowed } from "@/lib/auth-helpers";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 export const dynamic = "force-dynamic";
 // El asistente hace hasta dos llamadas a un modelo más un SELECT: el default de
 // Vercel se queda corto y el corte se ve como "no me contestó nunca".
@@ -10,7 +10,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const user = await getEffectiveUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!isAllowed(user.role, "assistant:access"))
+  if (!hasPermission(await getEffectivePermissions(user), "assistant:access"))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   let body: { question?: unknown; locale?: unknown };
   try {

@@ -1,7 +1,8 @@
 import { AttendanceWorkspace } from "@/components/asistencia/attendance-workspace";
 import { SinFicha } from "@/components/turno/sin-ficha";
-import { isAllowed } from "@/lib/auth-helpers";
 import { db } from "@/lib/db";
+import { requireFeature } from "@/lib/features/resolve";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 import { getEmployeeDailySchedules } from "@/lib/employee-schedule-service";
 import { empleadoVinculado, rangoDelDia, valorLocal } from "@/lib/turno";
@@ -19,6 +20,8 @@ export const metadata = { title: "Asistencia" };
  */
 export default async function AsistenciaPage() {
   const user = await requirePagePermission("attendance:punch");
+  await requireFeature("attendance");
+  const permissions = await getEffectivePermissions(user);
   const esEmpleado = user.role === "employee";
   const propio = await empleadoVinculado(user);
   if (esEmpleado && !propio) return <SinFicha que="tu asistencia" />;
@@ -90,7 +93,7 @@ export default async function AsistenciaPage() {
       weekStartsOn={settings?.weekStartsOn ?? 1}
       dayStart={start.toISOString()}
       dayEnd={end.toISOString()}
-      canManage={isAllowed(user.role, "attendance:manage")}
+      canManage={hasPermission(permissions, "attendance:manage")}
       selfOnly={esEmpleado}
     />
   );

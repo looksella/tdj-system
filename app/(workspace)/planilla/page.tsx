@@ -1,5 +1,6 @@
 import { PayrollWorkspace } from "@/components/planilla/payroll-workspace";
 import { db } from "@/lib/db";
+import { requireFeature } from "@/lib/features/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 import { mesActual, rangoDelDia } from "@/lib/turno";
 import { formatScheduleTime } from "@/lib/schedule-time";
@@ -16,6 +17,7 @@ export const metadata = { title: "Planilla" };
  */
 export default async function PlanillaPage() {
   await requirePagePermission("payroll:manage");
+  await requireFeature("payroll");
 
   const { day } = rangoDelDia();
   const rosterEnd = new Date(`${day}T00:00:00.000Z`);

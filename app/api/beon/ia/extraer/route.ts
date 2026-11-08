@@ -1,7 +1,7 @@
 // Extracts structured data from uploaded files using the configured AI service.
 import { NextResponse } from "next/server";
 import { extraerDatos, MAX_ARCHIVOS, type ArchivoEntrada, type Campo } from "@/lib/beon-ia";
-import { isAllowed } from "@/lib/auth-helpers";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
 // PDF extraction can take longer than ordinary API requests.
 export const maxDuration = 300;
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       { status: 401 },
     );
   }
-  if (!isAllowed(user.role, "assistant:access")) {
+  if (!hasPermission(await getEffectivePermissions(user), "assistant:access")) {
     return NextResponse.json(
       { ok: false, code: "forbidden", message: "No tienes permiso para usar esta función." },
       { status: 403 },

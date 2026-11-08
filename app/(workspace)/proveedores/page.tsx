@@ -11,11 +11,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
+import { requireFeature } from "@/lib/features/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Proveedores" };
 export default async function SuppliersPage() {
   await requirePagePermission("suppliers:manage");
+  await requireFeature("suppliers");
   const suppliers = await db.proveedor.findMany({
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
     take: 200,

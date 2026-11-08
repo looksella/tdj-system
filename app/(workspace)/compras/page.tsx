@@ -12,11 +12,13 @@ import {
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/locale";
+import { requireFeature } from "@/lib/features/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Compras y abastecimiento" };
 export default async function PurchasesPage() {
   await requirePagePermission("purchases:manage");
+  await requireFeature("purchases");
   const [purchases, products] = await Promise.all([
     db.compra.findMany({
       orderBy: { purchasedAt: "desc" },

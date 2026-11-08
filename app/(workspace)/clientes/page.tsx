@@ -12,11 +12,13 @@ import {
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/locale";
+import { requireFeature } from "@/lib/features/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Clientes" };
 export default async function CustomersPage() {
   await requirePagePermission("customers:manage");
+  await requireFeature("customers");
   const customers = await db.cliente.findMany({
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
     take: 200,

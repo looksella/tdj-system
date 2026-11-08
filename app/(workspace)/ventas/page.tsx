@@ -1,7 +1,7 @@
 import { PosScreen } from "@/components/sales/pos-screen";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/locale";
-import { isAllowed } from "@/lib/auth-helpers";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 import { isRemoteScannerEnabled } from "@/lib/remote-scanner-config";
 
@@ -15,7 +15,8 @@ export default async function SalesPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const user = await requirePagePermission("pos:read");
-  const canManageSales = isAllowed(user.role, "sales:manage");
+  const permissions = await getEffectivePermissions(user);
+  const canManageSales = hasPermission(permissions, "sales:manage");
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
   const [products, sales, count] = await Promise.all([

@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { denialForFeature } from "@/lib/features/guard";
 import { autorizarAccion, autorizarAlgunaAccion, guardAccion } from "@/lib/guard-autorizacion";
 import { cashMethodFromSale, lockCashOperations } from "@/lib/caja";
 import { categorySkuPrefix, nextAvailableProductSku } from "@/lib/product-sku";
@@ -265,7 +266,7 @@ export async function archiveProduct(id: string) {
 }
 
 export async function deleteProduct(id: string) {
-  const authorization = await autorizarAccion("inventory:manage");
+  const authorization = await autorizarAccion("inventory:delete");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
 
   try {
@@ -379,7 +380,7 @@ export async function findProductByCode(raw: string): Promise<FindProductByCodeR
 }
 
 export async function adjustStock(id: string, delta: number, note: string) {
-  const authorization = await autorizarAccion("inventory:manage");
+  const authorization = await autorizarAccion("inventory:adjust");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
   if (!Number.isInteger(delta) || delta === 0)
     return { ok: false, message: "Indica una cantidad entera distinta de cero." };
@@ -569,7 +570,7 @@ export async function createSale(
   }
 }
 export async function cancelSale(id: string) {
-  const authorization = await autorizarAccion("sales:manage");
+  const authorization = await autorizarAccion("sales:void");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
   const actorId = authorization.usuario.id;
   const actorEmail = authorization.usuario.email || actorId;
@@ -740,6 +741,8 @@ async function applyPurchaseStock(
 export async function createPurchase(input: PurchaseInput) {
   const authorization = await autorizarAccion("purchases:manage");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
+  const off = await denialForFeature("purchases");
+  if (off) return { ok: false, message: off };
   const actorId = authorization.usuario.id;
   const actorEmail = authorization.usuario.email || actorId;
   try {
@@ -795,6 +798,8 @@ export async function createPurchase(input: PurchaseInput) {
 export async function updatePurchase(id: string, input: PurchaseInput) {
   const authorization = await autorizarAccion("purchases:manage");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
+  const off = await denialForFeature("purchases");
+  if (off) return { ok: false, message: off };
   const actorId = authorization.usuario.id;
   const actorEmail = authorization.usuario.email || actorId;
   try {
@@ -866,6 +871,8 @@ function supplierInput(formData: FormData) {
 export async function createSupplier(formData: FormData) {
   const denial = await guardAccion("suppliers:manage");
   if (denial) return { ok: false, message: denial };
+  const off = await denialForFeature("suppliers");
+  if (off) return { ok: false, message: off };
   try {
     await db.proveedor.create({ data: supplierInput(formData) });
     revalidatePath("/proveedores");
@@ -880,6 +887,8 @@ export async function createSupplier(formData: FormData) {
 export async function updateSupplier(id: string, formData: FormData) {
   const denial = await guardAccion("suppliers:manage");
   if (denial) return { ok: false, message: denial };
+  const off = await denialForFeature("suppliers");
+  if (off) return { ok: false, message: off };
   try {
     await db.proveedor.update({ where: { id }, data: supplierInput(formData) });
     revalidatePath("/proveedores");
@@ -958,6 +967,8 @@ function customerInput(formData: FormData) {
 export async function createCustomer(formData: FormData) {
   const denial = await guardAccion("customers:manage");
   if (denial) return { ok: false, message: denial };
+  const off = await denialForFeature("customers");
+  if (off) return { ok: false, message: off };
   try {
     await db.cliente.create({ data: customerInput(formData) });
     revalidatePath("/clientes");
@@ -972,6 +983,8 @@ export async function createCustomer(formData: FormData) {
 export async function updateCustomer(id: string, formData: FormData) {
   const denial = await guardAccion("customers:manage");
   if (denial) return { ok: false, message: denial };
+  const off = await denialForFeature("customers");
+  if (off) return { ok: false, message: off };
   try {
     await db.cliente.update({ where: { id }, data: customerInput(formData) });
     revalidatePath("/clientes");
