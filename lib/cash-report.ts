@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import { db } from "@/lib/db";
 import { TIMEZONE } from "@/lib/locale";
-import { guardarDesdeServer } from "@/lib/beon-storage";
+import { guardarDesdeServer, storageActivo } from "@/lib/beon-storage";
 
 const money = (amount: number) => `$${amount.toFixed(2)}`;
 const formatter = new Intl.DateTimeFormat("es-SV", {
@@ -206,6 +206,13 @@ async function loadSession(sessionId: string) {
 }
 
 export async function storeCashReport(sessionId: string) {
+  if (!storageActivo()) {
+    console.warn(
+      "[cash-report] Storage no configurado; se omite la generación del PDF del cierre.",
+    );
+    return { path: "", filename: "" };
+  }
+
   const session = await loadSession(sessionId);
   if (!session || session.status !== "CLOSED")
     throw new Error("Solo se puede generar el reporte de una caja cerrada.");
