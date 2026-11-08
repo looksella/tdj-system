@@ -20,6 +20,7 @@ import { storeCashReport } from "@/lib/cash-report";
 import { cents, lockCashOperations } from "@/lib/caja";
 import { db } from "@/lib/db";
 import { urlFirmada } from "@/lib/beon-storage";
+import { denialForFeature } from "@/lib/features/guard";
 import { isFeatureEnabled } from "@/lib/features/resolve";
 import { guardAccion } from "@/lib/guard-autorizacion";
 import { TIMEZONE } from "@/lib/locale";
@@ -411,6 +412,8 @@ export async function annulCashSession(sessionId: string, reason: string) {
 
 export async function recordPunch(form: FormData) {
   const { esEmpleado, empleado } = await contextoDeOperacion("attendance:punch");
+  const off = await denialForFeature("attendance");
+  if (off) throw new Error(off);
   if (esEmpleado && !empleado) throw new Error(SIN_FICHA);
   // Un empleado solo marca por sí mismo: el id del formulario no se usa.
   const employeeId = esEmpleado ? empleado!.id : textFrom(form, "employeeId");
@@ -457,6 +460,8 @@ export async function recordPunch(form: FormData) {
 
 export async function updateAttendanceMark(form: FormData) {
   await contextoDeOperacion("attendance:manage");
+  const off = await denialForFeature("attendance");
+  if (off) throw new Error(off);
   const id = textFrom(form, "id");
   const date = new Date(textFrom(form, "markedAt"));
   if (!Number.isFinite(date.getTime())) throw new Error("La fecha del marcaje no es válida.");
@@ -472,12 +477,16 @@ export async function updateAttendanceMark(form: FormData) {
 
 export async function deleteAttendanceMark(form: FormData) {
   await contextoDeOperacion("attendance:manage");
+  const off = await denialForFeature("attendance");
+  if (off) throw new Error(off);
   await db.attendanceMark.delete({ where: { id: textFrom(form, "id") } });
   refresh("/", "/asistencia", "/planilla");
 }
 
 export async function updateLaborSettings(form: FormData) {
   await contextoDeOperacion("attendance:manage");
+  const off = await denialForFeature("attendance");
+  if (off) throw new Error(off);
   const graceMinutes = Math.max(0, Math.min(60, numberFrom(form, "graceMinutes")));
   const weekStartsOn = numberFrom(form, "weekStartsOn");
   if (![0, 1].includes(weekStartsOn)) {
@@ -634,6 +643,8 @@ export async function deleteEmployee(form: FormData) {
 
 export async function generatePayroll(form: FormData) {
   await contextoDeOperacion("payroll:manage");
+  const off = await denialForFeature("payroll");
+  if (off) throw new Error(off);
   const month = textFrom(form, "month");
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Selecciona un período válido.");
   const [year, monthNumber] = month.split("-").map(Number);
@@ -770,6 +781,8 @@ export async function generatePayroll(form: FormData) {
 
 export async function updatePayroll(form: FormData) {
   await contextoDeOperacion("payroll:manage");
+  const off = await denialForFeature("payroll");
+  if (off) throw new Error(off);
   const id = textFrom(form, "id");
   const line = await db.payrollLine.findUnique({ where: { id }, include: { employee: true } });
   if (!line) throw new Error("No se encontró la liquidación.");
@@ -815,6 +828,8 @@ export async function updatePayroll(form: FormData) {
 
 export async function deletePayroll(form: FormData) {
   await contextoDeOperacion("payroll:manage");
+  const off = await denialForFeature("payroll");
+  if (off) throw new Error(off);
   await db.payrollLine.delete({ where: { id: textFrom(form, "id") } });
   refresh("/", "/planilla");
 }

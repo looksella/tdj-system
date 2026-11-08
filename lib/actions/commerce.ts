@@ -268,6 +268,8 @@ export async function archiveProduct(id: string) {
 export async function deleteProduct(id: string) {
   const authorization = await autorizarAccion("inventory:delete");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
+  const off = await denialForFeature("delete-products");
+  if (off) return { ok: false, message: off };
 
   try {
     const result = await db.$transaction(async (tx) => {
@@ -382,6 +384,8 @@ export async function findProductByCode(raw: string): Promise<FindProductByCodeR
 export async function adjustStock(id: string, delta: number, note: string) {
   const authorization = await autorizarAccion("inventory:adjust");
   if (!authorization.usuario) return { ok: false, message: authorization.denial };
+  const off = await denialForFeature("manual-stock-adjustment");
+  if (off) return { ok: false, message: off };
   if (!Number.isInteger(delta) || delta === 0)
     return { ok: false, message: "Indica una cantidad entera distinta de cero." };
   try {
