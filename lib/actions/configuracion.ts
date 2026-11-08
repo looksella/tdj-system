@@ -9,7 +9,7 @@ import { getFeatureStates } from "@/lib/features/resolve";
 import { disabledDependents, isDependencyEnabled } from "@/lib/features/state";
 import { guardAccion } from "@/lib/guard-autorizacion";
 import { PERMISSION_BY_KEY, PERMISSION_CATALOG, PERMISSION_KEYS } from "@/lib/permissions/catalog";
-import { previewPermissions } from "@/lib/permissions/state";
+import { isAdminRole, previewPermissions } from "@/lib/permissions/state";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
 
 export type FeatureAdminRow = {
@@ -60,11 +60,6 @@ function adminClient() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-function isAdminRole(role: string | undefined | null) {
-  const normalized = (role ?? "").trim().toLowerCase();
-  return normalized === "admin" || normalized === "developer";
-}
-
 async function actorOrThrow() {
   const actor = await getEffectiveUser();
   if (!actor) throw new Error("Tu sesión expiró. Volvé a entrar.");
@@ -102,6 +97,9 @@ export async function listPermissionUsers(): Promise<AdminUser[]> {
   const denial = await guardAccion("settings:manage");
   if (denial) return [];
 
+  const actor = await actorOrThrow();
+  const isDeveloper = actor.role === "developer";
+
   let users: { id: string; email: string; role: string }[] = [];
   try {
     const service = adminClient();
@@ -116,7 +114,7 @@ export async function listPermissionUsers(): Promise<AdminUser[]> {
         email: entry.email ?? "",
         role: (entry.app_metadata?.role as string | undefined) ?? "customer",
       }))
-      .filter((entry) => entry.email);
+      .filter((entry) => entry.email && (isDeveloper || entry.role !== "developer"));
   } catch (error) {
     console.error("[configuracion] no se pudo crear el cliente de administración", error);
     return [];
@@ -170,7 +168,7 @@ export async function listPermissionUsers(): Promise<AdminUser[]> {
       id: user.id,
       email: user.email,
       role: user.role,
-      canEdit: !isAdminRole(user.role),
+      canEdit: !isAdminRole(user.role) && user.role !== "customer",
       overrides: overrides.length,
       matrix,
     };
@@ -218,6 +216,11 @@ export async function setFeature(key: string, enabled: boolean): Promise<ActionR
   const denial = await guardAccion("settings:manage");
   if (denial) return { ok: false, message: denial || SIN_CONFIG };
 
+  const actor = await actorOrThrow();
+  if (!isAdminRole(actor.role)) {
+    return { ok: false, message: "Solo un administrador puede cambiar herramientas." };
+  }
+
   const feature = FEATURE_BY_KEY.get(key);
   if (!feature) return { ok: false, message: "Esa herramienta no existe." };
   if (feature.kind === "core") {
@@ -232,7 +235,6 @@ export async function setFeature(key: string, enabled: boolean): Promise<ActionR
     return { ok: false, message: `Activá primero: ${missing.join(", ")}.` };
   }
 
-  const actor = await actorOrThrow();
   const dependents = enabled ? [] : disabledDependents(key, states);
 
   try {
@@ -313,16 +315,26 @@ export async function saveUserPermissions(
   const denial = await guardAccion("settings:manage");
   if (denial) return { ok: false, message: denial || SIN_CONFIG };
 
+  const actor = await actorOrThrow();
+
+  if (!isAdminRole(actor.role)) {
+    return { ok: false, message: "Solo un administrador puede cambiar permisos." };
+  }
+  if (userId === actor.id) {
+    return { ok: false, message: "No podés cambiar tus propios permisos." };
+  }
+
   let entries: [string, PermissionChange][];
   try {
     entries = validChanges(changes);
+    if (entries.some(([key, effect]) => key === "settings:manage" && effect === "grant")) {
+      return { ok: false, message: "El acceso a Configuración es solo del rol administrador." };
+    }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Datos inválidos." };
   }
   if (entries.length === 0) return { ok: false, message: "No hay cambios para guardar." };
   if (!userId) return { ok: false, message: "Elegí un usuario." };
-
-  const actor = await actorOrThrow();
 
   let targetRole = "";
   let targetEmail = "";
@@ -342,14 +354,8 @@ export async function saveUserPermissions(
       message: "El rol administrador conserva todos los permisos y no se edita acá.",
     };
   }
-  if (targetRole === "developer") {
-    return { ok: false, message: "El rol developer no se puede modificar desde la aplicación." };
-  }
   if (targetRole === "customer") {
     return { ok: false, message: "Un usuario sin rol del sistema no puede recibir permisos." };
-  }
-  if (userId === actor.id && entries.some(([key]) => key === "settings:manage")) {
-    return { ok: false, message: "No podés quitarte tu propio acceso a la configuración." };
   }
 
   try {
@@ -408,6 +414,13 @@ export async function resetUserPermissions(userId: string): Promise<ActionResult
   const denial = await guardAccion("settings:manage");
   if (denial) return { ok: false, message: denial || SIN_CONFIG };
   const actor = await actorOrThrow();
+
+  if (!isAdminRole(actor.role)) {
+    return { ok: false, message: "Solo un administrador puede restablecer permisos." };
+  }
+  if (userId === actor.id) {
+    return { ok: false, message: "No podés restablecer tus propios permisos." };
+  }
 
   try {
     const { data, error } = await adminClient().auth.admin.getUserById(userId);

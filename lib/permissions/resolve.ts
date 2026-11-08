@@ -65,7 +65,7 @@ export async function getEffectivePermissions(
   }
 
   const overrides = await getUserPermissionOverrides(user?.id ?? null);
-  return resolveEffectivePermissions(role, overrides);
+  return applyDependencyRules(resolveEffectivePermissions(role, overrides));
 }
 
 /** Lista ordenada sin el comodín `*`, para pasarla a componentes de cliente. */

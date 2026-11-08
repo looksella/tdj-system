@@ -150,7 +150,7 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
   {
     key: "pos-discounts",
     label: "Descuentos en POS",
-    description: "Descuentos manuales y promociones en ventas.",
+    description: "Descuentos manuales en ventas.",
     group: "ventas",
     kind: "optional",
     defaultEnabled: true,
