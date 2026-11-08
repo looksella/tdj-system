@@ -2,11 +2,16 @@ import Link from "next/link";
 import { ArrowRight, LayoutGrid, ShieldCheck, Zap } from "lucide-react";
 import { AuditPanel } from "@/components/configuracion/audit-panel";
 import { FeaturesPanel } from "@/components/configuracion/features-panel";
+import { PermissionsPanel } from "@/components/configuracion/permissions-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getAdminConfigState, listAuditLog } from "@/lib/actions/configuracion";
+import {
+  getAdminConfigState,
+  listAuditLog,
+  listPermissionUsers,
+} from "@/lib/actions/configuracion";
 import { requirePagePermission } from "@/lib/require-page-permission";
 
 export const metadata = { title: "Configuración" };
@@ -14,7 +19,11 @@ export const metadata = { title: "Configuración" };
 export default async function ConfiguracionPage() {
   await requirePagePermission("settings:manage");
 
-  const [state, audit] = await Promise.all([getAdminConfigState(), listAuditLog(1, 20)]);
+  const [state, audit, users] = await Promise.all([
+    getAdminConfigState(),
+    listAuditLog(1, 20),
+    listPermissionUsers(),
+  ]);
   const features = state.features ?? [];
   const activeTools = features.filter((feature) => feature.enabled).length;
   const optionalTools = features.filter((feature) => feature.kind === "optional").length;
@@ -80,6 +89,7 @@ export default async function ConfiguracionPage() {
       <Tabs defaultValue="herramientas" className="space-y-5">
         <TabsList className="w-fit">
           <TabsTrigger value="herramientas">Herramientas</TabsTrigger>
+          <TabsTrigger value="usuarios">Usuarios y permisos</TabsTrigger>
           <TabsTrigger value="auditoria">Historial</TabsTrigger>
         </TabsList>
 
@@ -94,6 +104,10 @@ export default async function ConfiguracionPage() {
             </Badge>
           </div>
           <FeaturesPanel features={features} />
+        </TabsContent>
+
+        <TabsContent value="usuarios" className="space-y-5">
+          <PermissionsPanel users={users} />
         </TabsContent>
 
         <TabsContent value="auditoria">

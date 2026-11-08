@@ -20,16 +20,12 @@ export function FeaturesPanel({ features }: { features: FeatureAdminRow[] }) {
     return acc;
   }, {});
 
-  function toggle(feature: FeatureAdminRow, next: boolean) {
-    if (busyKey) return;
-    if (!next && feature.dependentLabels.length > 0) {
-      const ok = window.confirm(
-        `Al apagar ${feature.label} también quedan apagadas: ${feature.dependentLabels.join(", ")}. Los datos no se borran. ¿Continuar?`,
-      );
-      if (!ok) return;
-    }
-
-    const previous = states[feature.key];
+  function apply(
+    feature: FeatureAdminRow,
+    next: boolean,
+    previous: boolean,
+    isUndo = false,
+  ) {
     setStates((current) => ({ ...current, [feature.key]: next }));
     setBusyKey(feature.key);
 
@@ -41,8 +37,29 @@ export function FeaturesPanel({ features }: { features: FeatureAdminRow[] }) {
         toast.error(result.message);
         return;
       }
-      toast.success(result.message);
+      if (isUndo) {
+        toast.success(`${feature.label} volvió a quedar ${previous ? "activa" : "apagada"}.`);
+        return;
+      }
+      toast.success(result.message, {
+        action: {
+          label: "Deshacer",
+          onClick: () => apply(feature, previous, next, true),
+        },
+      });
     });
+  }
+
+  function toggle(feature: FeatureAdminRow, next: boolean) {
+    if (busyKey) return;
+    if (!next && feature.dependentLabels.length > 0) {
+      const ok = window.confirm(
+        `Al apagar ${feature.label} también quedan apagadas: ${feature.dependentLabels.join(", ")}. Los datos no se borran. ¿Continuar?`,
+      );
+      if (!ok) return;
+    }
+
+    apply(feature, next, states[feature.key]);
   }
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search } from "lucide-react";
@@ -79,11 +79,10 @@ export function PermissionsPanel({ users }: { users: AdminUser[] }) {
   const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const filteredUsers = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    if (!term) return users;
-    return users.filter((user) => `${user.email} ${user.role}`.toLowerCase().includes(term));
-  }, [query, users]);
+  const term = query.trim().toLowerCase();
+  const filteredUsers = term
+    ? users.filter((user) => `${user.email} ${user.role}`.toLowerCase().includes(term))
+    : users;
 
   const selected = users.find((user) => user.id === selectedId) ?? null;
   const draft = selected ? (drafts[selected.id] ?? {}) : {};
@@ -94,14 +93,14 @@ export function PermissionsPanel({ users }: { users: AdminUser[] }) {
       : new Set(selected.matrix.map((row) => row.key))
     : new Set<string>();
 
-  const groups = useMemo(() => {
-    if (!selected) return [] as [string, PermissionMatrixRow[]][];
+  const groups: [string, PermissionMatrixRow[]][] = [];
+  if (selected) {
     const map = new Map<string, PermissionMatrixRow[]>();
     for (const row of selected.matrix) {
       map.set(row.group, [...(map.get(row.group) ?? []), row]);
     }
-    return [...map.entries()];
-  }, [selected]);
+    groups.push(...map.entries());
+  }
 
   function setState(permission: string, state: "role" | "allow" | "deny") {
     if (!selected || !selected.canEdit) return;
@@ -113,12 +112,7 @@ export function PermissionsPanel({ users }: { users: AdminUser[] }) {
 
   function save() {
     if (!selected || changed.length === 0) return;
-    const sensitive = changed.filter((entry) => entry.sensitive);
-    if (sensitive.length > 0) {
-      setConfirming(true);
-      return;
-    }
-    commit();
+    setConfirming(true);
   }
 
   function commit() {
@@ -319,18 +313,23 @@ export function PermissionsPanel({ users }: { users: AdminUser[] }) {
       <Dialog open={confirming} onOpenChange={setConfirming}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar cambios sensibles</DialogTitle>
+            <DialogTitle>Confirmar cambios de permisos</DialogTitle>
             <DialogDescription>
-              Estos permisos afectan caja, planilla, equipo o configuración. Revisá el resumen antes
-              de guardar.
+              {changed.some((entry) => entry.sensitive)
+                ? "Hay cambios sobre permisos sensibles (caja, planilla, equipo o configuración). Revisá el resumen antes de guardar."
+                : "Revisá el resumen de los cambios antes de guardar."}
             </DialogDescription>
           </DialogHeader>
           <ul className="max-h-60 space-y-1 overflow-y-auto text-sm">
-            {changed
-              .filter((entry) => entry.sensitive)
-              .map((entry) => (
+            {changed.map((entry) => (
                 <li key={entry.key} className="rounded-lg bg-muted/40 px-3 py-2">
-                  <span className="font-medium">{entry.label}</span>:{" "}
+                  <span className="font-medium">{entry.label}</span>
+                  {entry.sensitive && (
+                    <Badge variant="outline" className="ml-2">
+                      Sensible
+                    </Badge>
+                  )}
+                  :{" "}
                   {entry.before === "role"
                     ? "según su rol"
                     : entry.before === "allow"
