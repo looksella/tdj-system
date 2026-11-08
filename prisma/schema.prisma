@@ -418,6 +418,10 @@ model LaborSettings {
   weeklyNightLimit    Decimal  @default(39) @map("weekly_night_limit") @db.Decimal(5, 2)
   minimumRestHours    Int      @default(8) @map("minimum_rest_hours")
   weekStartsOn        Int      @default(1) @map("week_starts_on")
+  // Interruptor "Exigir asistencia para abrir caja". Es la única fuente de
+  // verdad de esa herramienta: no se duplica en `app_features`.
+  // Nace en `true` porque abrir caja ya exigía marcaje antes de este cambio.
+  requireAttendanceToOpenCash Boolean @default(true) @map("require_attendance_to_open_cash")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
 
