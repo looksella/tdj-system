@@ -14,6 +14,7 @@ import {
   Menu,
   Package,
   Scale,
+  Settings,
   ShoppingCart,
   Sparkles,
   Star,
@@ -134,6 +135,13 @@ const navigationSections: { id: string; label: string; items: NavItem[] }[] = [
         href: "/admin/usuarios",
         icon: UserCog,
         permission: "users:manage",
+      },
+      {
+        id: "configuracion",
+        label: "Configuración",
+        href: "/configuracion",
+        icon: Settings,
+        permission: "settings:manage",
       },
       {
         id: "asistencia",
