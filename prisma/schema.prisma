@@ -423,3 +423,41 @@ model LaborSettings {
 
   @@map("labor_settings")
 }
+
+model AppFeature {
+  key       String   @id
+  enabled   Boolean
+  updatedBy String?  @map("updated_by")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("app_features")
+}
+
+model UserPermissionOverride {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id")
+  permission String
+  effect     String
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([userId, permission])
+  @@index([userId])
+  @@map("user_permission_overrides")
+}
+
+model PermissionAuditLog {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId      String   @map("actor_id")
+  targetUserId String?  @map("target_user_id")
+  kind         String
+  key          String
+  before       String?
+  after        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([targetUserId, createdAt])
+  @@map("permission_audit_logs")
+}

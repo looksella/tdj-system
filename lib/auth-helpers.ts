@@ -19,22 +19,18 @@
  *   user_metadata: { role: null } })`. Si el segundo paso falla, se revierte
  *   la invitación: nunca un usuario a medio crear.
  */
-export type AppRole = "developer" | "admin" | "employee";
+import { PERMISSION_CATALOG, getDefaultPermissionsForRole } from "@/lib/permissions/catalog";
+
+export type AppRole = "developer" | "admin" | "employee" | "customer";
 /**
  * Qué puede hacer cada rol. `"*"` es wildcard.
  * Un rol que no esté acá no puede hacer nada — fail closed.
  */
-const PERMISSIONS: Record<AppRole, Set<string>> = {
-  developer: new Set(["*"]),
-  admin: new Set(["*"]),
-  employee: new Set([
-    "inventory:read",
-    "pos:read",
-    "sales:create",
-    // Turno: lo que hace el equipo en el mostrador.
-    "cash:operate",
-    "attendance:punch",
-  ]),
+export const PERMISSIONS: Record<AppRole, Set<string>> = {
+  developer: new Set([...PERMISSION_CATALOG.map((permission) => permission.key), "*"]),
+  admin: new Set([...PERMISSION_CATALOG.map((permission) => permission.key), "*"]),
+  employee: getDefaultPermissionsForRole("employee"),
+  customer: new Set(),
 };
 
 /**

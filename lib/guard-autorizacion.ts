@@ -2,11 +2,12 @@
 /**
  * Server-side authorization guard for mutations. Use it as the first check in
  * API handlers and Server Actions that modify data. Roles and permissions are
- * defined in `lib/auth-helpers.ts`.
+ * defined in `lib/permissions/catalog.ts` and resolved through
+ * `lib/permissions/resolve.ts`.
  */
 import { NextResponse } from "next/server";
-import { isAllowed } from "@/lib/auth-helpers";
 import { packDeTextos } from "@/lib/beon-idioma";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
 /**
  * Lo que lee un empleado del dueño en un toast cuando su rol no tiene la
@@ -51,7 +52,12 @@ export async function autorizarAlgunaAccion(
     );
     return { usuario: null, denial: SIN_PERMISO };
   }
-  if (!usuario || !acciones.some((accion) => isAllowed(usuario.role, accion))) {
+  if (!usuario) {
+    return { usuario: null, denial: SIN_PERMISO };
+  }
+
+  const permisos = await getEffectivePermissions(usuario);
+  if (!acciones.some((accion) => hasPermission(permisos, accion))) {
     return { usuario: null, denial: SIN_PERMISO };
   }
   return { usuario, denial: null };

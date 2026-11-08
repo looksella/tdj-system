@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
-import { isAllowed } from "@/lib/auth-helpers";
+import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
 
-export async function requirePagePermission(permission: string) {
+export async function requirePermission(permission: string) {
   const user = await getEffectiveUser();
   if (!user) redirect("/sign-in");
-  if (!isAllowed(user.role, permission)) redirect("/ventas");
+
+  const permissions = await getEffectivePermissions(user);
+  if (!hasPermission(permissions, permission)) redirect("/sin-permiso");
   return user;
 }
+
+export const requirePagePermission = requirePermission;

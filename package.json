@@ -16,6 +16,7 @@
     "postinstall": "prisma generate",
     "setup": "prisma generate && prisma db push --skip-generate --accept-data-loss",
     "seed": "node --env-file=.env prisma/seed.mjs",
+    "check-permissions-parity": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/check-permissions-parity.ts",
     "check-db": "node --env-file=.env scripts/check-db.mjs",
     "db:migrate-schedules": "node --env-file=.env scripts/apply-rotating-schedule-migration.mjs",
     "sincronizar-inventario": "node --env-file=.env scripts/sincronizar-inventario.mjs",
