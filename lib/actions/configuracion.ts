@@ -1,106 +1,116 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { createClient } from "@supabase/supabase-js";
 import { db } from "@/lib/db";
-import { FEATURE_CATALOG, FEATURE_BY_KEY } from "@/lib/features/catalog";
-import { PERMISSION_CATALOG, PERMISSION_KEYS } from "@/lib/permissions/catalog";
-import { getEffectivePermissions } from "@/lib/permissions/resolve";
+import { FEATURE_BY_KEY, FEATURE_CATALOG } from "@/lib/features/catalog";
+import { getFeatureStates } from "@/lib/features/resolve";
+import { disabledDependents, isDependencyEnabled } from "@/lib/features/state";
 import { guardAccion } from "@/lib/guard-autorizacion";
+import { PERMISSION_BY_KEY, PERMISSION_CATALOG, PERMISSION_KEYS } from "@/lib/permissions/catalog";
+import { previewPermissions } from "@/lib/permissions/state";
 import { getEffectiveUser } from "@/lib/supabase/helpers";
-import { isAllowed } from "@/lib/auth-helpers";
 
-export type FeatureStateEntry = {
+export type FeatureAdminRow = {
   key: string;
-  enabled: boolean;
   label: string;
   description: string;
   group: string;
   kind: "core" | "optional";
   defaultEnabled: boolean;
+  enabled: boolean;
   dependsOn: string[];
-  permissions: string[];
+  dependencyLabels: string[];
+  dependentLabels: string[];
 };
 
-export type PermissionAdminRow = {
+export type PermissionState = "role" | "allow" | "deny";
+
+export type PermissionMatrixRow = {
   key: string;
   label: string;
   description: string;
   group: string;
   sensitive: boolean;
+  state: PermissionState;
+  effective: boolean;
+  inherited: boolean;
   dependsOn: string[];
-  defaultRoles: readonly string[];
+  locked: boolean;
 };
 
-export async function getAdminConfigState() {
-  const denial = await guardAccion("settings:manage");
-  if (denial) {
-    return { features: [], users: [], audits: [], permissionCatalog: [] as PermissionAdminRow[] };
-  }
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: string;
+  canEdit: boolean;
+  overrides: number;
+  matrix: PermissionMatrixRow[];
+};
 
-  const features = await Promise.all(
-    FEATURE_CATALOG.map(async (feature) => {
-      try {
-        const row = await db.appFeature.findUnique({
-          where: { key: feature.key },
-          select: { enabled: true },
-        });
-        return {
-          key: feature.key,
-          enabled: row?.enabled ?? feature.defaultEnabled,
-          label: feature.label,
-          description: feature.description,
-          group: feature.group,
-          kind: feature.kind,
-          defaultEnabled: feature.defaultEnabled,
-          dependsOn: feature.dependsOn,
-          permissions: feature.permissions,
-        } satisfies FeatureStateEntry;
-      } catch (error) {
-        console.error("[configuracion] no se pudo leer app_features", feature.key, error);
-        return {
-          key: feature.key,
-          enabled: feature.defaultEnabled,
-          label: feature.label,
-          description: feature.description,
-          group: feature.group,
-          kind: feature.kind,
-          defaultEnabled: feature.defaultEnabled,
-          dependsOn: feature.dependsOn,
-          permissions: feature.permissions,
-        } satisfies FeatureStateEntry;
-      }
-    }),
-  );
+export type ActionResult = { ok: boolean; message: string };
 
-  const users = await listUsersForAdmin();
-  const audits = await listAuditLog(1, 20);
+const SIN_CONFIG = "No tenés permiso para administrar la configuración.";
 
-  return {
-    features,
-    users,
-    audits,
-    permissionCatalog: PERMISSION_CATALOG,
-  };
+function adminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Falta la configuración de Supabase en el servidor.");
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-async function listUsersForAdmin() {
-  const user = await getEffectiveUser();
-  if (!user || !isAllowed(user.role, "settings:manage")) return [];
+function isAdminRole(role: string | undefined | null) {
+  const normalized = (role ?? "").trim().toLowerCase();
+  return normalized === "admin" || normalized === "developer";
+}
 
+async function actorOrThrow() {
+  const actor = await getEffectiveUser();
+  if (!actor) throw new Error("Tu sesión expiró. Volvé a entrar.");
+  return actor;
+}
+
+/** Estado de herramientas + catálogo de permisos para la pantalla. */
+export async function getAdminConfigState() {
+  const denial = await guardAccion("settings:manage");
+  if (denial) return { features: [] as FeatureAdminRow[], permissionCatalog: [] };
+
+  const states = await getFeatureStates();
+  const features: FeatureAdminRow[] = FEATURE_CATALOG.map((feature) => ({
+    key: feature.key,
+    label: feature.label,
+    description: feature.description,
+    group: feature.group,
+    kind: feature.kind,
+    defaultEnabled: feature.defaultEnabled,
+    enabled: states.get(feature.key) ?? feature.defaultEnabled,
+    dependsOn: feature.dependsOn,
+    dependencyLabels: feature.dependsOn
+      .map((dependency) => FEATURE_BY_KEY.get(dependency)?.label ?? dependency)
+      .filter(Boolean),
+    dependentLabels: FEATURE_CATALOG.filter(
+      (candidate) => candidate.dependsOn.includes(feature.key) && states.get(candidate.key),
+    ).map((candidate) => candidate.label),
+  })).sort((left, right) => left.group.localeCompare(right.group));
+
+  return { features, permissionCatalog: PERMISSION_CATALOG };
+}
+
+/** Lista de usuarios con su matriz efectiva; una sola consulta de overrides. */
+export async function listPermissionUsers(): Promise<AdminUser[]> {
+  const denial = await guardAccion("settings:manage");
+  if (denial) return [];
+
+  let users: { id: string; email: string; role: string }[] = [];
   try {
-    const service = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
-    const { data, error } = await service.auth.admin.listUsers();
+    const service = adminClient();
+    const { data, error } = await service.auth.admin.listUsers({ perPage: 200 });
     if (error) {
-      console.error("[configuracion] lista de usuarios fallida", error.message);
+      console.error("[configuracion] no se pudo listar usuarios", error.message);
       return [];
     }
-
-    return data.users
+    users = data.users
       .map((entry) => ({
         id: entry.id,
         email: entry.email ?? "",
@@ -108,156 +118,303 @@ async function listUsersForAdmin() {
       }))
       .filter((entry) => entry.email);
   } catch (error) {
-    console.error("[configuracion] no se pudo listar usuarios", error);
+    console.error("[configuracion] no se pudo crear el cliente de administración", error);
     return [];
   }
+
+  let overridesByUser = new Map<string, { permission: string; effect: string }[]>();
+  try {
+    const rows = await db.userPermissionOverride.findMany({
+      where: { userId: { in: users.map((user) => user.id) } },
+      select: { userId: true, permission: true, effect: true },
+    });
+    overridesByUser = rows.reduce((acc, row) => {
+      const list = acc.get(row.userId) ?? [];
+      list.push({ permission: row.permission, effect: row.effect });
+      acc.set(row.userId, list);
+      return acc;
+    }, new Map<string, { permission: string; effect: string }[]>());
+  } catch (error) {
+    console.error(
+      "[configuracion] no se pudieron leer los overrides; se muestran los del rol",
+      error,
+    );
+  }
+
+  return users.map((user) => {
+    const overrides = overridesByUser.get(user.id) ?? [];
+    const effective = previewPermissions(
+      user.role,
+      overrides.map((override) => ({
+        permission: override.permission,
+        effect: override.effect === "deny" ? ("deny" as const) : ("grant" as const),
+      })),
+    );
+    const matrix = PERMISSION_CATALOG.map((permission) => {
+      const override = overrides.find((row) => row.permission === permission.key);
+      return {
+        key: permission.key,
+        label: permission.label,
+        description: permission.description,
+        group: permission.group,
+        sensitive: permission.sensitive,
+        state: override ? (override.effect === "deny" ? "deny" : "allow") : "role",
+        effective: isAdminRole(user.role) ? true : effective.has(permission.key),
+        inherited: permission.defaultRoles.includes((user.role ?? "").toLowerCase()),
+        dependsOn: permission.dependsOn,
+        locked: isAdminRole(user.role),
+      } satisfies PermissionMatrixRow;
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      canEdit: !isAdminRole(user.role),
+      overrides: overrides.length,
+      matrix,
+    };
+  });
 }
 
 export async function listAuditLog(page = 1, take = 20) {
   const denial = await guardAccion("settings:manage");
   if (denial) throw new Error(denial);
 
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  const safeTake = Math.min(Math.max(Math.floor(take), 1), 100);
+
   try {
     const [entries, total] = await Promise.all([
       db.permissionAuditLog.findMany({
         orderBy: { createdAt: "desc" },
-        skip: (page - 1) * take,
-        take,
+        skip: (safePage - 1) * safeTake,
+        take: safeTake,
       }),
       db.permissionAuditLog.count(),
     ]);
-
-    return { entries, total, page, take };
+    return { entries, total, page: safePage, take: safeTake };
   } catch (error) {
-    console.error("[configuracion] no se pudo leer historial de permisos", error);
-    return { entries: [], total: 0, page, take };
+    console.error("[configuracion] no se pudo leer el historial", error);
+    return { entries: [], total: 0, page: safePage, take: safeTake };
   }
 }
 
-export async function setFeature(key: string, enabled: boolean) {
+async function writeAudit(
+  tx: Prisma.TransactionClient,
+  data: {
+    actorId: string;
+    targetUserId?: string | null;
+    kind: "permission" | "feature";
+    key: string;
+    before: string | null;
+    after: string | null;
+  },
+) {
+  await tx.permissionAuditLog.create({ data });
+}
+
+export async function setFeature(key: string, enabled: boolean): Promise<ActionResult> {
   const denial = await guardAccion("settings:manage");
-  if (denial) throw new Error(denial);
+  if (denial) return { ok: false, message: denial || SIN_CONFIG };
 
   const feature = FEATURE_BY_KEY.get(key);
-  if (!feature) throw new Error("La herramienta no existe.");
-  if (feature.kind === "core") throw new Error("La herramienta esencial no se puede apagar.");
+  if (!feature) return { ok: false, message: "Esa herramienta no existe." };
+  if (feature.kind === "core") {
+    return { ok: false, message: `${feature.label} es esencial y no se puede apagar.` };
+  }
 
-  const actor = await getEffectiveUser();
-  if (!actor) throw new Error("Tu sesión expiró.");
+  const states = await getFeatureStates();
+  if (enabled && !isDependencyEnabled(key, states)) {
+    const missing = feature.dependsOn
+      .filter((dependency) => !states.get(dependency))
+      .map((dependency) => FEATURE_BY_KEY.get(dependency)?.label ?? dependency);
+    return { ok: false, message: `Activá primero: ${missing.join(", ")}.` };
+  }
+
+  const actor = await actorOrThrow();
+  const dependents = enabled ? [] : disabledDependents(key, states);
 
   try {
     await db.$transaction(async (tx) => {
+      if (key === "require-attendance-to-open-cash") {
+        const current = await tx.laborSettings.findFirst({
+          select: { id: true, requireAttendanceToOpenCash: true },
+          orderBy: { createdAt: "asc" },
+        });
+        if (current) {
+          await tx.laborSettings.update({
+            where: { id: current.id },
+            data: { requireAttendanceToOpenCash: enabled },
+          });
+        } else {
+          await tx.laborSettings.create({ data: { requireAttendanceToOpenCash: enabled } });
+        }
+        await writeAudit(tx, {
+          actorId: actor.id,
+          kind: "feature",
+          key,
+          before: String(current?.requireAttendanceToOpenCash ?? true),
+          after: String(enabled),
+        });
+        return;
+      }
+
       const before = await tx.appFeature.findUnique({ where: { key }, select: { enabled: true } });
       await tx.appFeature.upsert({
         where: { key },
         update: { enabled, updatedBy: actor.id },
         create: { key, enabled, updatedBy: actor.id },
       });
-      await tx.permissionAuditLog.create({
-        data: {
-          actorId: actor.id,
-          kind: "feature",
-          key,
-          before: before?.enabled ? "true" : "false",
-          after: String(enabled),
-        },
+      await writeAudit(tx, {
+        actorId: actor.id,
+        kind: "feature",
+        key,
+        before: String(before?.enabled ?? feature.defaultEnabled),
+        after: String(enabled),
       });
     });
   } catch (error) {
     console.error("[configuracion] no se pudo guardar la herramienta", key, error);
-    throw new Error("No se pudo guardar la configuración de la herramienta.");
+    return { ok: false, message: "No se pudo guardar el cambio. Intentá de nuevo." };
   }
 
+  revalidatePath("/", "layout");
   revalidatePath("/configuracion");
-  revalidatePath("/configuracion/permisos");
+  return {
+    ok: true,
+    message: enabled
+      ? `${feature.label} quedó activa.`
+      : dependents.length > 0
+        ? `${feature.label} quedó apagada. También se apagan: ${dependents.join(", ")}.`
+        : `${feature.label} quedó apagada. Los datos siguen guardados.`,
+  };
 }
 
-export async function setUserPermission(
-  userId: string,
-  permission: string,
-  effect: "grant" | "deny" | null,
-) {
-  const denial = await guardAccion("settings:manage");
-  if (denial) throw new Error(denial);
+type PermissionChange = "grant" | "deny" | null;
 
-  if (!PERMISSION_KEYS.includes(permission)) {
-    throw new Error("Ese permiso no existe en el catálogo.");
+function validChanges(changes: Record<string, PermissionChange>) {
+  const entries = Object.entries(changes ?? {});
+  for (const [key, effect] of entries) {
+    if (!PERMISSION_BY_KEY.has(key))
+      throw new Error(`El permiso "${key}" no existe en el catálogo.`);
+    if (effect !== null && effect !== "grant" && effect !== "deny") {
+      throw new Error("El estado del permiso no es válido.");
+    }
+  }
+  return entries;
+}
+
+/** Guarda un lote de cambios y audita cada uno en la misma transacción. */
+export async function saveUserPermissions(
+  userId: string,
+  changes: Record<string, PermissionChange>,
+): Promise<ActionResult> {
+  const denial = await guardAccion("settings:manage");
+  if (denial) return { ok: false, message: denial || SIN_CONFIG };
+
+  let entries: [string, PermissionChange][];
+  try {
+    entries = validChanges(changes);
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Datos inválidos." };
+  }
+  if (entries.length === 0) return { ok: false, message: "No hay cambios para guardar." };
+  if (!userId) return { ok: false, message: "Elegí un usuario." };
+
+  const actor = await actorOrThrow();
+
+  let targetRole = "";
+  let targetEmail = "";
+  try {
+    const { data, error } = await adminClient().auth.admin.getUserById(userId);
+    if (error || !data?.user) return { ok: false, message: "No se encontró el usuario." };
+    targetRole = (data.user.app_metadata?.role as string | undefined) ?? "customer";
+    targetEmail = data.user.email ?? userId;
+  } catch (error) {
+    console.error("[configuracion] no se pudo leer el usuario", userId, error);
+    return { ok: false, message: "No se pudo verificar el usuario." };
   }
 
-  const actor = await getEffectiveUser();
-  if (!actor) throw new Error("Tu sesión expiró.");
+  if (isAdminRole(targetRole)) {
+    return {
+      ok: false,
+      message: "El rol administrador conserva todos los permisos y no se edita acá.",
+    };
+  }
+  if (targetRole === "developer") {
+    return { ok: false, message: "El rol developer no se puede modificar desde la aplicación." };
+  }
+  if (targetRole === "customer") {
+    return { ok: false, message: "Un usuario sin rol del sistema no puede recibir permisos." };
+  }
+  if (userId === actor.id && entries.some(([key]) => key === "settings:manage")) {
+    return { ok: false, message: "No podés quitarte tu propio acceso a la configuración." };
+  }
 
   try {
-    const service = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-    const { data: targetUser, error: userError } = await service.auth.admin.getUserById(userId);
-    if (userError || !targetUser) {
-      throw new Error("No se encontró el usuario.");
-    }
-
-    if (targetUser.user.id === actor.id && permission === "settings:manage") {
-      throw new Error("No podés quitarte tu acceso a la configuración.");
-    }
-
-    if ((targetUser.user.app_metadata?.role as string | undefined) === "admin") {
-      throw new Error("No se puede tocar el rol administrador desde aquí.");
-    }
-
     await db.$transaction(async (tx) => {
-      const before = await tx.userPermissionOverride.findUnique({
-        where: { userId_permission: { userId, permission } },
-        select: { effect: true },
-      });
-
-      if (effect === null) {
-        await tx.userPermissionOverride.deleteMany({ where: { userId, permission } });
-      } else {
-        await tx.userPermissionOverride.upsert({
+      for (const [permission, effect] of entries) {
+        const before = await tx.userPermissionOverride.findUnique({
           where: { userId_permission: { userId, permission } },
-          update: { effect, createdBy: actor.id },
-          create: { userId, permission, effect, createdBy: actor.id },
+          select: { effect: true },
         });
-      }
 
-      await tx.permissionAuditLog.create({
-        data: {
+        if (effect === null) {
+          await tx.userPermissionOverride.deleteMany({ where: { userId, permission } });
+        } else {
+          await tx.userPermissionOverride.upsert({
+            where: { userId_permission: { userId, permission } },
+            update: { effect, createdBy: actor.id },
+            create: { userId, permission, effect, createdBy: actor.id },
+          });
+        }
+
+        await writeAudit(tx, {
           actorId: actor.id,
           targetUserId: userId,
           kind: "permission",
           key: permission,
           before: before?.effect ?? null,
           after: effect,
-        },
-      });
+        });
+      }
     });
   } catch (error) {
-    console.error("[configuracion] no se pudo guardar permiso", userId, permission, error);
-    throw new Error(error instanceof Error ? error.message : "No se pudo guardar el permiso.");
+    console.error("[configuracion] no se pudieron guardar los permisos", userId, error);
+    return { ok: false, message: "No se pudieron guardar los cambios. Intentá de nuevo." };
   }
 
-  revalidatePath("/configuracion");
+  revalidatePath("/", "layout");
   revalidatePath("/configuracion/permisos");
+  return {
+    ok: true,
+    message: `Permisos de ${targetEmail} actualizados (${entries.length} ${entries.length === 1 ? "cambio" : "cambios"}).`,
+  };
 }
 
-export async function resetUserPermissions(userId: string) {
-  const denial = await guardAccion("settings:manage");
-  if (denial) throw new Error(denial);
+export async function setUserPermission(
+  userId: string,
+  permission: string,
+  effect: PermissionChange,
+): Promise<ActionResult> {
+  if (!PERMISSION_KEYS.includes(permission)) {
+    return { ok: false, message: "Ese permiso no existe en el catálogo." };
+  }
+  return saveUserPermissions(userId, { [permission]: effect });
+}
 
-  const actor = await getEffectiveUser();
-  if (!actor) throw new Error("Tu sesión expiró.");
+export async function resetUserPermissions(userId: string): Promise<ActionResult> {
+  const denial = await guardAccion("settings:manage");
+  if (denial) return { ok: false, message: denial || SIN_CONFIG };
+  const actor = await actorOrThrow();
 
   try {
-    const service = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-    const { data: targetUser, error: userError } = await service.auth.admin.getUserById(userId);
-    if (userError || !targetUser) throw new Error("No se encontró el usuario.");
-
-    if (targetUser.user.id === actor.id && (targetUser.user.app_metadata?.role as string | undefined) === "admin") {
-      throw new Error("No podés limpiar tus propios permisos de configuración.");
+    const { data, error } = await adminClient().auth.admin.getUserById(userId);
+    if (error || !data?.user) return { ok: false, message: "No se encontró el usuario." };
+    const role = (data.user.app_metadata?.role as string | undefined) ?? "customer";
+    if (isAdminRole(role)) {
+      return { ok: false, message: "Los administradores no tienen overrides que restablecer." };
     }
 
     await db.$transaction(async (tx) => {
@@ -265,62 +422,23 @@ export async function resetUserPermissions(userId: string) {
         where: { userId },
         select: { permission: true, effect: true },
       });
+      if (before.length === 0) return;
       await tx.userPermissionOverride.deleteMany({ where: { userId } });
-      await tx.permissionAuditLog.create({
-        data: {
-          actorId: actor.id,
-          targetUserId: userId,
-          kind: "permission",
-          key: "__reset__",
-          before: JSON.stringify(before),
-          after: "[]",
-        },
+      await writeAudit(tx, {
+        actorId: actor.id,
+        targetUserId: userId,
+        kind: "permission",
+        key: "__reset__",
+        before: JSON.stringify(before),
+        after: "[]",
       });
     });
   } catch (error) {
-    console.error("[configuracion] no se pudo resetear permisos del usuario", userId, error);
-    throw new Error(error instanceof Error ? error.message : "No se pudo resetear permisos del usuario.");
+    console.error("[configuracion] no se pudieron restablecer los permisos", userId, error);
+    return { ok: false, message: "No se pudieron restablecer los permisos." };
   }
 
-  revalidatePath("/configuracion");
+  revalidatePath("/", "layout");
   revalidatePath("/configuracion/permisos");
-}
-
-export async function getEffectivePermissionMatrixForUser(userId: string) {
-  const denial = await guardAccion("settings:manage");
-  if (denial) return {};
-
-  try {
-    const service = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-    const { data: targetUser, error } = await service.auth.admin.getUserById(userId);
-    if (error || !targetUser) return {};
-
-    const role = (targetUser.user.app_metadata?.role as string | undefined) ?? "customer";
-    const overrides = await db.userPermissionOverride.findMany({
-      where: { userId },
-      select: { permission: true, effect: true },
-    });
-    const permissions = await getEffectivePermissions({
-      id: userId,
-      email: targetUser.user.email ?? "",
-      role,
-    });
-
-    const matrix = Object.fromEntries(
-      PERMISSION_CATALOG.map((permission) => {
-        const current = overrides.find((row) => row.permission === permission.key);
-        const effective = permissions.has(permission.key) || permissions.has("*");
-        const state = current?.effect === "grant" ? "allow" : current?.effect === "deny" ? "deny" : "role";
-        return [permission.key, { state, effective, sensitive: permission.sensitive }];
-      }),
-    );
-
-    return matrix;
-  } catch (error) {
-    console.error("[configuracion] no se pudo calcular la matriz del usuario", userId, error);
-    return {};
-  }
+  return { ok: true, message: "El usuario volvió a los permisos de su rol." };
 }
