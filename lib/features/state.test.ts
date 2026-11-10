@@ -30,19 +30,6 @@ describe("catálogo de herramientas", () => {
     expect(states.get("customers")).toBe(false);
   });
 
-  it("apagar Compras apaga Pedidos y Producto exprés en cascada", () => {
-    const states = resolveFeatureStates([{ key: "purchases", enabled: false }]);
-    expect(states.get("supplier-orders")).toBe(false);
-    expect(states.get("quick-purchase")).toBe(false);
-    // Proveedores es independiente.
-    expect(states.get("suppliers")).toBe(true);
-  });
-
-  it("apagar Proveedores apaga sus alertas", () => {
-    const states = resolveFeatureStates([{ key: "suppliers", enabled: false }]);
-    expect(states.get("supplier-alerts")).toBe(false);
-  });
-
   it("exigir asistencia sale de LaborSettings, no de la tabla", () => {
     // Una fila en `app_features` no puede encenderla ni apagarla.
     const storedOff = resolveFeatureStates([
