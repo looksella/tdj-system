@@ -4,6 +4,7 @@ import { formatDateTime } from "@/lib/locale";
 import { getEffectivePermissions, hasPermission } from "@/lib/permissions/resolve";
 import { requirePagePermission } from "@/lib/require-page-permission";
 import { isRemoteScannerEnabled } from "@/lib/remote-scanner-config";
+import { isFeatureEnabled } from "@/lib/features/resolve";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Punto de venta" };
@@ -17,6 +18,8 @@ export default async function SalesPage({
   const user = await requirePagePermission("pos:read");
   const permissions = await getEffectivePermissions(user);
   const canManageSales = hasPermission(permissions, "sales:manage");
+  const canDiscount =
+    hasPermission(permissions, "sales:discount") && (await isFeatureEnabled("pos-discounts"));
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
   const [products, sales, count] = await Promise.all([
@@ -69,6 +72,7 @@ export default async function SalesPage({
       salesPage={page}
       salesPageCount={Math.max(1, Math.ceil(count / PAGE_SIZE))}
       canManageSales={canManageSales}
+      canDiscount={canDiscount}
       scannerEnabled={isRemoteScannerEnabled()}
     />
   );

@@ -15,6 +15,7 @@ export interface LineaImpresa {
   cantidad: number;
   precioUnitario: number;
   total: number;
+  descuento?: number;
 }
 const money = formatMoney;
 /** Ticket de mostrador para impresora térmica (rollo continuo). */
@@ -53,6 +54,12 @@ export function TicketVenta({
             </span>
             <span>{money(l.total)}</span>
           </div>
+          {l.descuento ? (
+  <div className="fila">
+    <span>Descuento</span>
+    <span>−{money(l.descuento)}</span>
+  </div>
+) : null}
         </div>
       ))}
       <div className="separador" />

@@ -3,12 +3,14 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { denialForFeature } from "@/lib/features/guard";
+import { discountedLineCents } from "@/lib/pricing";
 import { autorizarAccion, autorizarAlgunaAccion, guardAccion } from "@/lib/guard-autorizacion";
 import { cashMethodFromSale, lockCashOperations } from "@/lib/caja";
 import { categorySkuPrefix, nextAvailableProductSku } from "@/lib/product-sku";
 import { parseBarcode } from "@/lib/product-barcode";
 import { productImageStoragePath } from "@/lib/product-image";
 import { borrarArchivos, storageActivo } from "@/lib/beon-storage";
+
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -487,7 +489,7 @@ export async function searchPosProducts(term: string) {
     categoryName: product.category?.categoryName ?? null,
   }));
 }
-export type CheckoutLine = { productId: string; quantity: number };
+export type CheckoutLine = { productId: string; quantity: number; discountCents?: number };
 export async function createSale(
   lines: CheckoutLine[],
   paymentMethod: string,
@@ -512,11 +514,18 @@ export async function createSale(
   )
     return { ok: false, message: "Ingresa el efectivo recibido para calcular el vuelto." };
   const quantities = new Map<string, number>();
-  for (const line of lines) {
-    if (!line.productId || !Number.isInteger(line.quantity) || line.quantity < 1)
-      return { ok: false, message: "Revisa las cantidades del carrito." };
-    quantities.set(line.productId, (quantities.get(line.productId) ?? 0) + line.quantity);
-  }
+const discounts = new Map<string, number>();
+for (const line of lines) {
+  if (!line.productId || !Number.isInteger(line.quantity) || line.quantity < 1) return { ok: false, message: "Revisa las cantidades del carrito." };
+  quantities.set(line.productId, (quantities.get(line.productId) ?? 0) + line.quantity);
+  const discount = line.discountCents ?? 0;
+  if (!Number.isSafeInteger(discount) || discount < 0) return { ok: false, message: "Revisa los descuentos del carrito." };
+  if (discount > 0) discounts.set(line.productId, (discounts.get(line.productId) ?? 0) + discount);
+}
+if (discounts.size > 0) {
+  const noDiscount = (await guardAccion("sales:discount")) ?? (await denialForFeature("pos-discounts"));
+  if (noDiscount) return { ok: false, message: noDiscount };
+}
   try {
     const sale = await db.$transaction(async (tx) => {
       await lockCashOperations(tx);
@@ -536,9 +545,9 @@ export async function createSale(
         if (product.currentStock < quantity)
           throw new Error(`No hay suficiente inventario de ${product.name}.`);
         const unitCents = Math.round(product.salePrice.toNumber() * 100);
-        const lineCents = unitCents * quantity;
+        const { totalCents: lineCents, discountCents } = discountedLineCents(unitCents, quantity, discounts.get(product.id) ?? 0);
         totalCents += lineCents;
-        return { product, quantity, unitCents, lineCents };
+        return { product, quantity, unitCents, lineCents, discountCents };
       });
       if (paymentMethod === "Efectivo" && expectedTotalCents !== totalCents)
         throw new Error("El precio de un producto cambió. Actualiza la pantalla antes de cobrar.");
@@ -571,6 +580,7 @@ export async function createSale(
             quantity: item.quantity,
             unitPrice: (item.unitCents / 100).toFixed(2),
             lineTotal: (item.lineCents / 100).toFixed(2),
+            discountAmount: (item.discountCents / 100).toFixed(2),
           },
         });
         await tx.movimientoStock.create({

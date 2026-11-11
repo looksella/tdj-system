@@ -1,0 +1,32 @@
+[35mapp/(workspace)/clientes/page.tsx[m[36m:[m[32m107[m[36m:[m                    (sum, sale) => sum + sale[1;31m.total[m.toNumber(),
+[35mapp/(workspace)/compras/page.tsx[m[36m:[m[32m42[m[36m:[m  const totalPurchased = purchases.reduce((sum, purchase) => sum + purchase[1;31m.total[m.toNumber(), 0);
+[35mapp/(workspace)/compras/page.tsx[m[36m:[m[32m165[m[36m:[m                        {formatMoney(purchase[1;31m.total[m.toNumber())}
+[35mapp/(workspace)/page.tsx[m[36m:[m[32m49[m[36m:[m  const topRevenue = Math.max(1, ...categories.map((category) => Number(category[1;31m.total[mRevenue)));
+[35mapp/(workspace)/page.tsx[m[36m:[m[32m86[m[36m:[m          value={formatMoney(Number(salesToday._sum[1;31m.total[m ?? 0))}
+[35mapp/(workspace)/page.tsx[m[36m:[m[32m114[m[36m:[m              const revenue = Number(category[1;31m.total[mRevenue);
+[35mapp/(workspace)/page.tsx[m[36m:[m[32m172[m[36m:[m                      <p className="font-bold">{formatMoney(Number(sale[1;31m.total[m))}</p>
+[35mapp/(workspace)/reportes/page.tsx[m[36m:[m[32m58[m[36m:[m  const totalSales = sales.reduce((total, sale) => total + sale[1;31m.total[m.toNumber(), 0);
+[35mapp/(workspace)/reportes/page.tsx[m[36m:[m[32m192[m[36m:[m                      {category[1;31m.total[mQuantitySold.toLocaleString("es-SV")} unidades ·{" "}
+[35mapp/(workspace)/reportes/page.tsx[m[36m:[m[32m197[m[36m:[m                    {formatMoney(category[1;31m.total[mRevenue.toNumber())}
+[35mapp/(workspace)/reportes/page.tsx[m[36m:[m[32m270[m[36m:[m                      <p className="font-bold tabular-nums">{formatMoney(sale[1;31m.total[m.toNumber())}</p>
+[35mapp/(workspace)/ventas/page.tsx[m[36m:[m[32m60[m[36m:[m        total: sale[1;31m.total[m.toString(),
+[35mcomponents/configuracion/audit-panel.tsx[m[36m:[m[32m54[m[36m:[m  const totalPages = Math.max(1, Math.ceil(data[1;31m.total[m / data.take));
+[35mcomponents/configuracion/audit-panel.tsx[m[36m:[m[32m72[m[36m:[m        <Badge variant="outline">{data[1;31m.total[m} registros</Badge>
+[35mcomponents/sales/pos-screen.tsx[m[36m:[m[32m170[m[36m:[m      if (!result.ok || !result.saleNumber || !result.soldAt || result[1;31m.total[mCents === undefined) {
+[35mcomponents/sales/pos-screen.tsx[m[36m:[m[32m179[m[36m:[m        total: result[1;31m.total[mCents / 100,
+[35mcomponents/sales/pos-screen.tsx[m[36m:[m[32m182[m[36m:[m        changeCents: paymentMethod === "Efectivo" ? receivedCents! - result[1;31m.total[mCents : null,
+[35mcomponents/sales/pos-screen.tsx[m[36m:[m[32m412[m[36m:[m                Venta #{ticket.number} · {formatMoney(ticket[1;31m.total[m)}
+[35mcomponents/sales/pos-screen.tsx[m[36m:[m[32m450[m[36m:[m            total={ticket[1;31m.total[m}
+[35mcomponents/sales/pos-screen.tsx[m[36m:[m[32m546[m[36m:[m            <p className="text-lg font-bold">{formatMoney(Number(sale[1;31m.total[m))}</p>
+[35mlib/actions/commerce.ts[m[36m:[m[32m608[m[36m:[m      totalCents: Math.round(sale[1;31m.total[m.toNumber() * 100),
+[35mlib/actions/commerce.ts[m[36m:[m[32m638[m[36m:[m          amount: sale[1;31m.total[m,
+[35mlib/actions/operations.ts[m[36m:[m[32m114[m[36m:[m  if (!employeeId || opening[1;31m.total[m <= 0)
+[35mlib/actions/operations.ts[m[36m:[m[32m149[m[36m:[m        openingFloat: opening[1;31m.total[m,
+[35mlib/actions/operations.ts[m[36m:[m[32m163[m[36m:[m  const countedCash = closing[1;31m.total[m;
+[35mlib/beon-storage-client.ts[m[36m:[m[32m44[m[36m:[m        opts.onProgress(Math.round((e.loaded / e[1;31m.total[m) * 100));
+[35mlib/print/documents.tsx[m[36m:[m[32m54[m[36m:[m            <span>{money(l[1;31m.total[m)}</span>
+[35mlib/print/documents.tsx[m[36m:[m[32m164[m[36m:[m              <td className="num">{money(l[1;31m.total[m)}</td>
+[35mlib/print/styles.ts[m[36m:[m[32m57[m[36m:[m.print-ticket [1;31m.total[m { font-weight: 700; font-size: calc(var(--print-fuente) + 2pt); }
+[35mlib/print/styles.ts[m[36m:[m[32m101[m[36m:[m.print-documento [1;31m.total[mes { margin-top: 5mm; margin-left: auto; width: 70mm; }
+[35mlib/print/styles.ts[m[36m:[m[32m102[m[36m:[m.print-documento [1;31m.total[mes .fila { display: flex; justify-content: space-between; padding: 1mm 0; }
+[35mlib/print/styles.ts[m[36m:[m[32m103[m[36m:[m.print-documento [1;31m.total[mes [1;31m.total[m {

@@ -96,6 +96,16 @@ export const FEATURE_CATALOG: FeatureCatalogEntry[] = [
     dependsOn: [],
     permissions: ["customers:manage"],
   },
+    {
+    key: "pos-discounts",
+    label: "Descuentos en POS",
+    description: "Descuentos manuales por monto en ventas.",
+    group: "ventas",
+    kind: "optional",
+    defaultEnabled: true,
+    dependsOn: [],
+    permissions: ["sales:discount"],
+  },
   {
     key: "reports",
     label: "Reportes y estadísticas",

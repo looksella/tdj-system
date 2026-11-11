@@ -46,6 +46,7 @@ import {
 import { useRef } from "react";
 import { RemoteScannerModal } from "@/components/scanner/remote-scanner-modal";
 import type { ScannedProduct } from "@/lib/actions/commerce";
+import { DiscountPopover } from "@/components/sales/discount-popover";
 type Product = {
   id: string;
   name: string;
@@ -63,7 +64,7 @@ type Sale = {
   soldAtLabel: string;
   lines: { productName: string; quantity: number }[];
 };
-type CartLine = Product & { quantity: number };
+type CartLine = Product & { quantity: number; discountCents?: number };
 type Ticket = {
   number: number;
   soldAt: string;
@@ -80,6 +81,8 @@ export function PosScreen({
   salesPageCount,
   canManageSales,
   scannerEnabled,
+  canDiscount,
+
 }: {
   initialProducts: Product[];
   sales: Sale[];
@@ -87,6 +90,7 @@ export function PosScreen({
   salesPageCount: number;
   canManageSales: boolean;
   scannerEnabled: boolean;
+  canDiscount: boolean;
 }) {
   const [products, setProducts] = useState(initialProducts);
   const [term, setTerm] = useState("");
@@ -96,11 +100,16 @@ export function PosScreen({
   const [pending, startTransition] = useTransition();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const ticketRef = useRef<PrintFrameHandle>(null);
-  const totalCents = useMemo(
-    () =>
-      cart.reduce((sum, line) => sum + Math.round(Number(line.salePrice) * 100) * line.quantity, 0),
-    [cart],
-  );
+  const subtotalCents = useMemo(
+  () =>
+    cart.reduce((sum, line) => sum + Math.round(Number(line.salePrice) * 100) * line.quantity, 0),
+  [cart],
+);
+const discountTotalCents = useMemo(
+  () => cart.reduce((sum, line) => sum + (line.discountCents ?? 0), 0),
+  [cart],
+);
+const totalCents = subtotalCents - discountTotalCents;
   const total = totalCents / 100;
   const receivedCents = /^\d+(?:\.\d{1,2})?$/.test(cashReceived.trim())
     ? Math.round(Number(cashReceived) * 100)
@@ -148,21 +157,30 @@ export function PosScreen({
     return "ok";
   }
   function changeQuantity(id: string, delta: number) {
-    setCart((current) =>
-      current
-        .map((line) =>
-          line.id === id
-            ? { ...line, quantity: Math.min(line.currentStock, line.quantity + delta) }
-            : line,
-        )
-        .filter((line) => line.quantity > 0),
-    );
-  }
+  setCart((current) =>
+    current
+      .map((line) => {
+        if (line.id !== id) return line;
+        const quantity = Math.min(line.currentStock, line.quantity + delta);
+        const unitCents = Math.round(Number(line.salePrice) * 100);
+        const discountCents = Math.min(line.discountCents ?? 0, unitCents * quantity);
+        return { ...line, quantity, discountCents: discountCents > 0 ? discountCents : undefined };
+      })
+      .filter((line) => line.quantity > 0),
+  );
+}
+function setDiscount(id: string, discountCents: number) {
+  setCart((current) =>
+    current.map((line) =>
+      line.id === id ? { ...line, discountCents: discountCents > 0 ? discountCents : undefined } : line,
+    ),
+  );
+}
   function checkout() {
     if (!cart.length || !cashValid) return;
     startTransition(async () => {
       const result = await createSale(
-        cart.map(({ id, quantity }) => ({ productId: id, quantity })),
+        cart.map(({ id, quantity, discountCents }) => ({ productId: id, quantity, discountCents })),
         paymentMethod,
         paymentMethod === "Efectivo" ? receivedCents! : undefined,
         totalCents,
@@ -271,14 +289,26 @@ export function PosScreen({
         <CardContent className="space-y-5 p-5">
           {cart.length ? (
             <div className="max-h-[340px] space-y-3 overflow-y-auto pr-1">
-              {cart.map((line) => (
+              {cart.map((line) => {
+  const unitCents = Math.round(Number(line.salePrice) * 100);
+  const lineSubtotal = unitCents * line.quantity;
+  return (
                 <div key={line.id} className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{line.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatMoney(Number(line.salePrice))} c/u
-                    </p>
-                  </div>
+  <p className="truncate text-sm font-semibold">{line.name}</p>
+  <p className="text-xs text-muted-foreground">
+    {formatMoney(Number(line.salePrice))} c/u
+  </p>
+  {line.discountCents ? (
+    <p className="text-xs">
+      <span className="text-muted-foreground line-through">{formatMoney(lineSubtotal / 100)}</span>{" "}
+      <span className="font-semibold text-primary">
+        {formatMoney((lineSubtotal - line.discountCents) / 100)}
+      </span>{" "}
+      <Badge variant="secondary">−{formatMoney(line.discountCents / 100)}</Badge>
+    </p>
+  ) : null}
+</div>
                   <div className="flex items-center gap-1">
                     <Button
                       type="button"
@@ -303,11 +333,20 @@ export function PosScreen({
                       <Plus />
                     </Button>
                   </div>
+                  {canDiscount && (
+  <DiscountPopover
+    name={line.name}
+    subtotalCents={lineSubtotal}
+    discountCents={line.discountCents ?? 0}
+    onApply={(cents) => setDiscount(line.id, cents)}
+  />
+)}
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon-xs"
                     aria-label={`Quitar ${line.name}`}
+                    
                     onClick={() =>
                       setCart((current) => current.filter((item) => item.id !== line.id))
                     }
@@ -315,7 +354,8 @@ export function PosScreen({
                     <X />
                   </Button>
                 </div>
-              ))}
+                );
+})}
             </div>
           ) : (
             <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed text-center">
@@ -341,6 +381,18 @@ export function PosScreen({
               </SelectContent>
             </Select>
           </div>
+          {discountTotalCents > 0 && (
+  <div className="space-y-1 border-t pt-3 text-sm">
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">Subtotal</span>
+      <span className="tabular-nums">{formatMoney(subtotalCents / 100)}</span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">Descuentos</span>
+      <span className="tabular-nums text-primary">−{formatMoney(discountTotalCents / 100)}</span>
+    </div>
+  </div>
+)}
           <div className="flex items-end justify-between border-t pt-4">
             <span className="text-sm text-muted-foreground">Total a cobrar</span>
             <span className="text-3xl font-bold tabular-nums">{formatMoney(total)}</span>
@@ -446,6 +498,7 @@ export function PosScreen({
               cantidad: line.quantity,
               precioUnitario: Number(line.salePrice),
               total: Number(line.salePrice) * line.quantity,
+              descuento: line.discountCents ? line.discountCents / 100 : undefined,
             }))}
             total={ticket.total}
             pago={ticket.paymentMethod}
