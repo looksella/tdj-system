@@ -44,6 +44,7 @@ model Producto {
   category         Categoria?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   stockMovements   MovimientoStock[]
   saleLines        LineaVenta[]
+  presentations    Presentacion[]
   purchaseLines    LineaCompra[]
   supplierPrices   PrecioProveedor[]
 
@@ -149,6 +150,9 @@ model LineaVenta {
   quantity  Int
   unitPrice Decimal  @map("unit_price") @db.Decimal(12, 2)
   lineTotal Decimal  @map("line_total") @db.Decimal(12, 2) 
+  presentationName     String? @map("presentation_name")
+  presentationQty      Int?    @map("presentation_qty")
+  unitsPerPresentation Int?    @map("units_per_presentation")
   discountAmount Decimal @default(0) @map("discount_amount") @db.Decimal(12, 2)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -465,4 +469,21 @@ model PermissionAuditLog {
   @@index([createdAt])
   @@index([targetUserId, createdAt])
   @@map("permission_audit_logs")
+}
+
+model Presentacion {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId            String   @map("product_id") @db.Uuid
+  name                 String
+  unitsPerPresentation Int      @map("units_per_presentation")
+  salePrice            Decimal  @map("sale_price") @db.Decimal(12, 2)
+  barcode              String?  @unique
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+  product              Producto @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, name])
+  @@index([productId])
+  @@map("presentaciones")
 }
