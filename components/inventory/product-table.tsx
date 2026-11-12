@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate, formatMoney } from "@/lib/locale";
 import { ProductDialog } from "@/components/inventory/product-dialog";
+import { StockBreakdown } from "@/components/inventory/stock-breakdown";
 import {
   ArchiveProduct,
   DeleteProduct,
@@ -49,6 +50,13 @@ type Product = {
   imageUrl: string | null;
   expiryDate: string | null;
   isActive: boolean;
+  presentations: {
+    id: string;
+    name: string;
+    unitsPerPresentation: number;
+    salePrice: string;
+    barcode: string | null;
+  }[];
 };
 
 const SORT_LABELS: Array<{ key: SortKey; label: string }> = [
@@ -237,6 +245,10 @@ export function ProductTable({
                             </Badge>
                           )}
                         </div>
+                        <StockBreakdown
+                          stock={product.currentStock}
+                          presentations={product.presentations}
+                        />
                         <p className="mt-1 text-[11px] text-muted-foreground">
                           Mínimo {product.minStock}
                         </p>

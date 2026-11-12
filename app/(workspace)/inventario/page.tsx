@@ -37,6 +37,13 @@ type ProductRow = {
   expiryDate: string | null;
   isActive: boolean;
 };
+type PresentationView = {
+  id: string;
+  name: string;
+  unitsPerPresentation: number;
+  salePrice: string;
+  barcode: string | null;
+};
 const SORT_COLUMNS = {
   producto: Prisma.sql`p.name`,
   categoria: Prisma.sql`c.category_name`,
@@ -91,9 +98,40 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
   const total = Number(countRows[0]?.count ?? 0);
   const lowStockCount = Number(lowCount[0]?.count ?? 0);
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const presentationsByProduct = new Map<string, PresentationView[]>();
+  if (productRows.length > 0) {
+    try {
+      const presentationRows = await db.presentacion.findMany({
+        where: { productId: { in: productRows.map((product) => product.id) } },
+        orderBy: { unitsPerPresentation: "asc" },
+        select: {
+          id: true,
+          productId: true,
+          name: true,
+          unitsPerPresentation: true,
+          salePrice: true,
+          barcode: true,
+        },
+      });
+      for (const row of presentationRows) {
+        const list = presentationsByProduct.get(row.productId) ?? [];
+        list.push({
+          id: row.id,
+          name: row.name,
+          unitsPerPresentation: row.unitsPerPresentation,
+          salePrice: row.salePrice.toString(),
+          barcode: row.barcode,
+        });
+        presentationsByProduct.set(row.productId, list);
+      }
+    } catch (error) {
+      console.error("[inventario] no se pudieron leer las presentaciones", error);
+    }
+  }
   const products = productRows.map((product) => ({
     ...product,
     categoryName: product.categoryName ?? "",
+    presentations: presentationsByProduct.get(product.id) ?? [],
   }));
   return (
     <div className="space-y-7">

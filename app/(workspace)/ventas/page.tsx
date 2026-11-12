@@ -34,6 +34,11 @@ export default async function SalesPage({
         salePrice: true,
         currentStock: true,
         category: { select: { categoryName: true } },
+        presentations: {
+          where: { isActive: true },
+          orderBy: { unitsPerPresentation: "asc" },
+          select: { id: true, name: true, unitsPerPresentation: true, salePrice: true },
+        },
       },
     }),
     db.venta.findMany({
@@ -56,6 +61,12 @@ export default async function SalesPage({
         salePrice: product.salePrice.toString(),
         currentStock: product.currentStock,
         categoryName: product.category?.categoryName ?? null,
+        presentations: product.presentations.map((presentation) => ({
+          id: presentation.id,
+          name: presentation.name,
+          unitsPerPresentation: presentation.unitsPerPresentation,
+          salePrice: presentation.salePrice.toString(),
+        })),
       }))}
       sales={sales.map((sale) => ({
         id: sale.id,
@@ -67,6 +78,8 @@ export default async function SalesPage({
         lines: sale.lines.map((line) => ({
           productName: line.product.name,
           quantity: line.quantity,
+          presentationName: line.presentationName,
+          presentationQty: line.presentationQty,
         })),
       }))}
       salesPage={page}

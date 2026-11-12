@@ -10,6 +10,7 @@ import { categorySkuPrefix, nextAvailableProductSku } from "@/lib/product-sku";
 import { parseBarcode } from "@/lib/product-barcode";
 import { productImageStoragePath } from "@/lib/product-image";
 import { borrarArchivos, storageActivo } from "@/lib/beon-storage";
+import { baseUnits } from "@/lib/presentations";
 
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -105,6 +106,100 @@ async function rejectBarcodeSkuCollision(
     select: { id: true },
   });
   if (match) throw new Error("Ese código de barras ya pertenece a otro producto.");
+  const presentationMatch = await tx.presentacion.findFirst({
+    where: { barcode, ...(productId ? { NOT: { productId } } : {}) },
+    select: { id: true },
+  });
+  if (presentationMatch) {
+    throw new Error("Ese código de barras ya pertenece a una presentación de otro producto.");
+  }
+}
+
+type PresentationInput = {
+  name: string;
+  unitsPerPresentation: number;
+  salePrice: string;
+  barcode: string | null;
+};
+
+function presentationsInput(formData: FormData): PresentationInput[] {
+  const raw = text(formData.get("presentations"));
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Las presentaciones no tienen un formato válido.");
+  }
+  if (!Array.isArray(parsed)) throw new Error("Las presentaciones no tienen un formato válido.");
+  if (parsed.length > 4) throw new Error("Puedes definir hasta 4 presentaciones por producto.");
+  const names = new Set<string>();
+  return parsed.map((item) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    const units = Number(row.unitsPerPresentation);
+    const price = Number(row.salePrice);
+    const barcode = parseBarcode(typeof row.barcode === "string" ? row.barcode.trim() : "");
+    if (!name || name.length > 40) throw new Error("Cada presentación necesita un nombre corto.");
+    if (!Number.isInteger(units) || units < 2 || units > 10000) {
+      throw new Error(`“${name}” debe traer 2 unidades o más.`);
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error(`Revisa el precio de “${name}”.`);
+    }
+    const key = name.toLowerCase();
+    if (names.has(key)) throw new Error("Hay dos presentaciones con el mismo nombre.");
+    names.add(key);
+    return { name, unitsPerPresentation: units, salePrice: price.toFixed(2), barcode };
+  });
+}
+
+async function rejectPresentationBarcodeCollisions(
+  tx: Prisma.TransactionClient,
+  inputs: PresentationInput[],
+  productId: string,
+) {
+  const codes = inputs
+    .map((input) => input.barcode)
+    .filter((code): code is string => Boolean(code));
+  if (new Set(codes).size !== codes.length) {
+    throw new Error("Dos presentaciones tienen el mismo código de barras.");
+  }
+  for (const code of codes) {
+    const product = await tx.producto.findFirst({
+      where: { OR: [{ barcode: code }, { sku: { equals: code, mode: "insensitive" } }] },
+      select: { id: true },
+    });
+    if (product) throw new Error("Ese código de barras ya pertenece a un producto.");
+    const other = await tx.presentacion.findFirst({
+      where: { barcode: code, NOT: { productId } },
+      select: { id: true },
+    });
+    if (other) throw new Error("Ese código de barras ya pertenece a otro producto.");
+  }
+}
+
+async function syncPresentations(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  inputs: PresentationInput[],
+) {
+  await tx.presentacion.deleteMany({
+    where: { productId, NOT: { name: { in: inputs.map((input) => input.name) } } },
+  });
+  for (const input of inputs) {
+    const data = {
+      unitsPerPresentation: input.unitsPerPresentation,
+      salePrice: input.salePrice,
+      barcode: input.barcode,
+      isActive: true,
+    };
+    await tx.presentacion.upsert({
+      where: { productId_name: { productId, name: input.name } },
+      update: data,
+      create: { productId, name: input.name, ...data },
+    });
+  }
 }
 
 async function deleteProductImage(imageUrl: string | null) {
@@ -176,6 +271,7 @@ export async function createProduct(formData: FormData): Promise<CreateProductRe
     if (!Number.isInteger(initialStock) || initialStock < 0) {
       throw new Error("La cantidad inicial debe ser un número entero de cero o más.");
     }
+    const presentations = formData.has("presentations") ? presentationsInput(formData) : null;
     const categoryId = text(formData.get("categoryId"));
     let sku = "";
     let createdProduct: {
@@ -198,6 +294,10 @@ export async function createProduct(formData: FormData): Promise<CreateProductRe
               updatedBy: actorId,
             },
           });
+          if (presentations) {
+            await rejectPresentationBarcodeCollisions(tx, presentations, product.id);
+            await syncPresentations(tx, product.id, presentations);
+          }
           if (initialStock > 0) {
             await tx.movimientoStock.create({
               data: {
@@ -262,6 +362,11 @@ export async function updateProduct(id: string, formData: FormData) {
         where: { id },
         data: { ...input, updatedBy: authorization.usuario.id },
       });
+      const presentations = formData.has("presentations") ? presentationsInput(formData) : null;
+      if (presentations) {
+        await rejectPresentationBarcodeCollisions(tx, presentations, id);
+        await syncPresentations(tx, id, presentations);
+      }
     });
     revalidatePath("/inventario");
     revalidatePath("/");
@@ -356,6 +461,13 @@ export async function deleteProduct(id: string) {
   }
 }
 
+export type ProductPresentation = {
+  id: string;
+  name: string;
+  unitsPerPresentation: number;
+  salePrice: string;
+};
+
 export type ScannedProduct = {
   id: string;
   sku: string;
@@ -364,6 +476,9 @@ export type ScannedProduct = {
   currentStock: number;
   isActive: boolean;
   categoryName: string | null;
+  presentations: ProductPresentation[];
+  /** Si el código escaneado era el de una caja o paquete, su id; si no, null. */
+  scannedPresentationId: string | null;
 };
 
 export type FindProductByCodeResult =
@@ -372,6 +487,45 @@ export type FindProductByCodeResult =
   | { status: "retirado" }
   | { status: "error" };
 
+const scannedProductSelect = {
+  id: true,
+  sku: true,
+  name: true,
+  salePrice: true,
+  currentStock: true,
+  isActive: true,
+  category: { select: { categoryName: true } },
+  presentations: {
+    where: { isActive: true },
+    orderBy: { unitsPerPresentation: "asc" },
+    select: { id: true, name: true, unitsPerPresentation: true, salePrice: true },
+  },
+} satisfies Prisma.ProductoSelect;
+
+type ScannedProductRow = Prisma.ProductoGetPayload<{ select: typeof scannedProductSelect }>;
+
+function toScannedProduct(
+  product: ScannedProductRow,
+  scannedPresentationId: string | null,
+): ScannedProduct {
+  return {
+    id: product.id,
+    sku: product.sku,
+    name: product.name,
+    salePrice: product.salePrice.toString(),
+    currentStock: product.currentStock,
+    isActive: product.isActive,
+    categoryName: product.category?.categoryName ?? null,
+    presentations: product.presentations.map((presentation) => ({
+      id: presentation.id,
+      name: presentation.name,
+      unitsPerPresentation: presentation.unitsPerPresentation,
+      salePrice: presentation.salePrice.toString(),
+    })),
+    scannedPresentationId,
+  };
+}
+
 export async function findProductByCode(raw: string): Promise<FindProductByCodeResult> {
   const authorization = await autorizarAlgunaAccion(["pos:read", "inventory:read"]);
   if (!authorization.usuario) return { status: "error" };
@@ -379,35 +533,26 @@ export async function findProductByCode(raw: string): Promise<FindProductByCodeR
 
   try {
     const code = raw.trim();
-    const product = await db.producto.findFirst({
+    let product: ScannedProductRow | null = await db.producto.findFirst({
       where: {
         OR: [{ barcode: code }, { sku: { equals: code, mode: "insensitive" } }],
       },
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        salePrice: true,
-        currentStock: true,
-        isActive: true,
-        category: { select: { categoryName: true } },
-      },
+      select: scannedProductSelect,
     });
+    let scannedPresentationId: string | null = null;
+    if (!product) {
+      const presentation = await db.presentacion.findFirst({
+        where: { barcode: code, isActive: true },
+        select: { id: true, product: { select: scannedProductSelect } },
+      });
+      if (presentation) {
+        product = presentation.product;
+        scannedPresentationId = presentation.id;
+      }
+    }
     if (!product) return { status: "not_found" };
     if (!product.isActive) return { status: "retirado" };
-
-    return {
-      status: "ok",
-      product: {
-        id: product.id,
-        sku: product.sku,
-        name: product.name,
-        salePrice: product.salePrice.toString(),
-        currentStock: product.currentStock,
-        isActive: product.isActive,
-        categoryName: product.category?.categoryName ?? null,
-      },
-    };
+    return { status: "ok", product: toScannedProduct(product, scannedPresentationId) };
   } catch (error) {
     console.error("[findProductByCode] no se pudo buscar el producto.", error);
     return { status: "error" };
@@ -476,6 +621,11 @@ export async function searchPosProducts(term: string) {
       salePrice: true,
       currentStock: true,
       category: { select: { categoryName: true } },
+      presentations: {
+        where: { isActive: true },
+        orderBy: { unitsPerPresentation: "asc" },
+        select: { id: true, name: true, unitsPerPresentation: true, salePrice: true },
+      },
     },
     orderBy: { name: "asc" },
     take: 30,
@@ -487,9 +637,21 @@ export async function searchPosProducts(term: string) {
     salePrice: product.salePrice.toString(),
     currentStock: product.currentStock,
     categoryName: product.category?.categoryName ?? null,
+    presentations: product.presentations.map((presentation) => ({
+      id: presentation.id,
+      name: presentation.name,
+      unitsPerPresentation: presentation.unitsPerPresentation,
+      salePrice: presentation.salePrice.toString(),
+    })),
   }));
 }
-export type CheckoutLine = { productId: string; quantity: number; discountCents?: number };
+export type CheckoutLine = {
+  productId: string;
+  /** Si viene, `quantity` cuenta presentaciones (paquetes); si no, unidades individuales. */
+  presentationId?: string | null;
+  quantity: number;
+  discountCents?: number;
+};
 export async function createSale(
   lines: CheckoutLine[],
   paymentMethod: string,
@@ -513,19 +675,36 @@ export async function createSale(
       expectedTotalCents < 0)
   )
     return { ok: false, message: "Ingresa el efectivo recibido para calcular el vuelto." };
-  const quantities = new Map<string, number>();
-const discounts = new Map<string, number>();
-for (const line of lines) {
-  if (!line.productId || !Number.isInteger(line.quantity) || line.quantity < 1) return { ok: false, message: "Revisa las cantidades del carrito." };
-  quantities.set(line.productId, (quantities.get(line.productId) ?? 0) + line.quantity);
-  const discount = line.discountCents ?? 0;
-  if (!Number.isSafeInteger(discount) || discount < 0) return { ok: false, message: "Revisa los descuentos del carrito." };
-  if (discount > 0) discounts.set(line.productId, (discounts.get(line.productId) ?? 0) + discount);
-}
-if (discounts.size > 0) {
-  const noDiscount = (await guardAccion("sales:discount")) ?? (await denialForFeature("pos-discounts"));
-  if (noDiscount) return { ok: false, message: noDiscount };
-}
+
+  type RequestedLine = {
+    productId: string;
+    presentationId: string | null;
+    quantity: number;
+    discountCents: number;
+  };
+  const requested = new Map<string, RequestedLine>();
+  for (const line of lines) {
+    const presentationId = line.presentationId ? line.presentationId : null;
+    if (!line.productId || !Number.isInteger(line.quantity) || line.quantity < 1)
+      return { ok: false, message: "Revisa las cantidades del carrito." };
+    const discount = line.discountCents ?? 0;
+    if (!Number.isSafeInteger(discount) || discount < 0)
+      return { ok: false, message: "Revisa los descuentos del carrito." };
+    const key = `${line.productId}|${presentationId ?? ""}`;
+    const current = requested.get(key);
+    requested.set(key, {
+      productId: line.productId,
+      presentationId,
+      quantity: (current?.quantity ?? 0) + line.quantity,
+      discountCents: (current?.discountCents ?? 0) + discount,
+    });
+  }
+  if ([...requested.values()].some((line) => line.discountCents > 0)) {
+    const noDiscount =
+      (await guardAccion("sales:discount")) ?? (await denialForFeature("pos-discounts"));
+    if (noDiscount) return { ok: false, message: noDiscount };
+  }
+
   try {
     const sale = await db.$transaction(async (tx) => {
       await lockCashOperations(tx);
@@ -534,20 +713,48 @@ if (discounts.size > 0) {
         select: { id: true },
       });
       if (!session) throw new Error("Debes abrir caja antes de realizar operaciones.");
+      const productIds = [...new Set([...requested.values()].map((line) => line.productId))];
       const products = await tx.producto.findMany({
-        where: { id: { in: [...quantities.keys()] }, isActive: true },
+        where: { id: { in: productIds }, isActive: true },
+        include: { presentations: { where: { isActive: true } } },
       });
-      if (products.length !== quantities.size)
+      if (products.length !== productIds.length)
         throw new Error("Uno de los productos ya no está disponible.");
+      const productById = new Map(products.map((product) => [product.id, product]));
+      const unitsByProduct = new Map<string, number>();
       let totalCents = 0;
-      const lineData = products.map((product) => {
-        const quantity = quantities.get(product.id)!;
-        if (product.currentStock < quantity)
+      const lineData = [...requested.values()].map((line) => {
+        const product = productById.get(line.productId)!;
+        const presentation = line.presentationId
+          ? product.presentations.find((item) => item.id === line.presentationId)
+          : undefined;
+        if (line.presentationId && !presentation)
+          throw new Error(`La presentación de ${product.name} ya no está disponible.`);
+        const units = presentation
+          ? baseUnits(line.quantity, presentation.unitsPerPresentation)
+          : line.quantity;
+        const needed = (unitsByProduct.get(product.id) ?? 0) + units;
+        if (product.currentStock < needed)
           throw new Error(`No hay suficiente inventario de ${product.name}.`);
-        const unitCents = Math.round(product.salePrice.toNumber() * 100);
-        const { totalCents: lineCents, discountCents } = discountedLineCents(unitCents, quantity, discounts.get(product.id) ?? 0);
+        unitsByProduct.set(product.id, needed);
+        const unitCents = Math.round(
+          (presentation ? presentation.salePrice : product.salePrice).toNumber() * 100,
+        );
+        const { totalCents: lineCents, discountCents } = discountedLineCents(
+          unitCents,
+          line.quantity,
+          line.discountCents,
+        );
         totalCents += lineCents;
-        return { product, quantity, unitCents, lineCents, discountCents };
+        return {
+          product,
+          presentation,
+          quantity: line.quantity,
+          units,
+          unitCents,
+          lineCents,
+          discountCents,
+        };
       });
       if (paymentMethod === "Efectivo" && expectedTotalCents !== totalCents)
         throw new Error("El precio de un producto cambió. Actualiza la pantalla antes de cobrar.");
@@ -568,8 +775,8 @@ if (discounts.size > 0) {
       });
       for (const item of lineData) {
         const changed = await tx.producto.updateMany({
-          where: { id: item.product.id, currentStock: { gte: item.quantity } },
-          data: { currentStock: { decrement: item.quantity }, updatedBy: actorId },
+          where: { id: item.product.id, currentStock: { gte: item.units } },
+          data: { currentStock: { decrement: item.units }, updatedBy: actorId },
         });
         if (changed.count !== 1)
           throw new Error(`El inventario de ${item.product.name} cambió; intenta cobrar de nuevo.`);
@@ -577,18 +784,24 @@ if (discounts.size > 0) {
           data: {
             saleId: createdSale.id,
             productId: item.product.id,
-            quantity: item.quantity,
+            quantity: item.units,
             unitPrice: (item.unitCents / 100).toFixed(2),
             lineTotal: (item.lineCents / 100).toFixed(2),
             discountAmount: (item.discountCents / 100).toFixed(2),
+            presentationName: item.presentation?.name ?? null,
+            presentationQty: item.presentation ? item.quantity : null,
+            unitsPerPresentation: item.presentation?.unitsPerPresentation ?? null,
           },
         });
         await tx.movimientoStock.create({
           data: {
             productId: item.product.id,
-            delta: -item.quantity,
+            delta: -item.units,
             reason: "venta",
             reference: `V-${createdSale.number}`,
+            note: item.presentation
+              ? `${item.quantity} × ${item.presentation.name} (${item.units} unidades)`
+              : null,
             createdBy: actorId,
             createdByEmail: actorEmail,
           },

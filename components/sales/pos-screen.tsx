@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -43,10 +43,16 @@ import {
   createSale,
   searchPosProducts,
 } from "@/lib/actions/commerce";
-import { useRef } from "react";
 import { RemoteScannerModal } from "@/components/scanner/remote-scanner-modal";
 import type { ScannedProduct } from "@/lib/actions/commerce";
 import { DiscountPopover } from "@/components/sales/discount-popover";
+
+type PosPresentation = {
+  id: string;
+  name: string;
+  unitsPerPresentation: number;
+  salePrice: string;
+};
 type Product = {
   id: string;
   name: string;
@@ -54,6 +60,7 @@ type Product = {
   salePrice: string;
   currentStock: number;
   categoryName: string | null;
+  presentations: PosPresentation[];
 };
 type Sale = {
   id: string;
@@ -62,9 +69,19 @@ type Sale = {
   paymentMethod: string;
   status: string;
   soldAtLabel: string;
-  lines: { productName: string; quantity: number }[];
+  lines: {
+    productName: string;
+    quantity: number;
+    presentationName: string | null;
+    presentationQty: number | null;
+  }[];
 };
-type CartLine = Product & { quantity: number; discountCents?: number };
+/** `quantity` cuenta presentaciones si `presentationId` existe; si no, unidades individuales. */
+type CartLine = Product & {
+  presentationId: string | null;
+  quantity: number;
+  discountCents?: number;
+};
 type Ticket = {
   number: number;
   soldAt: string;
@@ -74,6 +91,29 @@ type Ticket = {
   receivedCents: number | null;
   changeCents: number | null;
 };
+
+function lineKey(productId: string, presentationId: string | null) {
+  return `${productId}|${presentationId ?? ""}`;
+}
+function findPresentation(presentations: PosPresentation[], id: string | null) {
+  return id ? (presentations.find((item) => item.id === id) ?? null) : null;
+}
+function lineUnitCents(line: CartLine) {
+  const presentation = findPresentation(line.presentations, line.presentationId);
+  return Math.round(Number(presentation?.salePrice ?? line.salePrice) * 100);
+}
+function lineUnitsPer(line: CartLine) {
+  return findPresentation(line.presentations, line.presentationId)?.unitsPerPresentation ?? 1;
+}
+/** Unidades individuales que el carrito ya usa de un producto (sin contar las líneas excluidas). */
+function unitsInCart(cart: CartLine[], productId: string, exceptKeys: string[] = []) {
+  return cart.reduce((sum, line) => {
+    if (line.id !== productId) return sum;
+    if (exceptKeys.includes(lineKey(line.id, line.presentationId))) return sum;
+    return sum + line.quantity * lineUnitsPer(line);
+  }, 0);
+}
+
 export function PosScreen({
   initialProducts,
   sales,
@@ -82,7 +122,6 @@ export function PosScreen({
   canManageSales,
   scannerEnabled,
   canDiscount,
-
 }: {
   initialProducts: Product[];
   sales: Sale[];
@@ -101,15 +140,14 @@ export function PosScreen({
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const ticketRef = useRef<PrintFrameHandle>(null);
   const subtotalCents = useMemo(
-  () =>
-    cart.reduce((sum, line) => sum + Math.round(Number(line.salePrice) * 100) * line.quantity, 0),
-  [cart],
-);
-const discountTotalCents = useMemo(
-  () => cart.reduce((sum, line) => sum + (line.discountCents ?? 0), 0),
-  [cart],
-);
-const totalCents = subtotalCents - discountTotalCents;
+    () => cart.reduce((sum, line) => sum + lineUnitCents(line) * line.quantity, 0),
+    [cart],
+  );
+  const discountTotalCents = useMemo(
+    () => cart.reduce((sum, line) => sum + (line.discountCents ?? 0), 0),
+    [cart],
+  );
+  const totalCents = subtotalCents - discountTotalCents;
   const total = totalCents / 100;
   const receivedCents = /^\d+(?:\.\d{1,2})?$/.test(cashReceived.trim())
     ? Math.round(Number(cashReceived) * 100)
@@ -137,50 +175,99 @@ const totalCents = subtotalCents - discountTotalCents;
       clearTimeout(timeout);
     };
   }, [term, initialProducts]);
-  function add(product: Product) {
-    if (product.currentStock <= 0) return;
+
+  /** Agrega 1 unidad o 1 presentación. Devuelve false si no alcanza el inventario. */
+  function add(product: Product, presentationId: string | null = null): boolean {
+    const presentation = findPresentation(product.presentations, presentationId);
+    if (presentationId && !presentation) return false;
+    const perUnit = presentation?.unitsPerPresentation ?? 1;
+    if (unitsInCart(cart, product.id) + perUnit > product.currentStock) return false;
+    const key = lineKey(product.id, presentation?.id ?? null);
     setCart((current) => {
-      const existing = current.find((line) => line.id === product.id);
+      const existing = current.find((line) => lineKey(line.id, line.presentationId) === key);
       if (existing)
         return current.map((line) =>
-          line.id === product.id
-            ? { ...line, quantity: Math.min(line.quantity + 1, product.currentStock) }
+          lineKey(line.id, line.presentationId) === key
+            ? { ...line, quantity: line.quantity + 1 }
             : line,
         );
-      return [...current, { ...product, quantity: 1 }];
+      return [...current, { ...product, presentationId: presentation?.id ?? null, quantity: 1 }];
     });
+    return true;
   }
   function addScanned(product: ScannedProduct): "ok" | "sin_stock" {
-    const quantityInCart = cart.find((line) => line.id === product.id)?.quantity ?? 0;
-    if (quantityInCart + 1 > product.currentStock) return "sin_stock";
-    add(product);
-    return "ok";
+    return add(product, product.scannedPresentationId) ? "ok" : "sin_stock";
   }
-  function changeQuantity(id: string, delta: number) {
-  setCart((current) =>
-    current
-      .map((line) => {
-        if (line.id !== id) return line;
-        const quantity = Math.min(line.currentStock, line.quantity + delta);
-        const unitCents = Math.round(Number(line.salePrice) * 100);
-        const discountCents = Math.min(line.discountCents ?? 0, unitCents * quantity);
-        return { ...line, quantity, discountCents: discountCents > 0 ? discountCents : undefined };
-      })
-      .filter((line) => line.quantity > 0),
-  );
-}
-function setDiscount(id: string, discountCents: number) {
-  setCart((current) =>
-    current.map((line) =>
-      line.id === id ? { ...line, discountCents: discountCents > 0 ? discountCents : undefined } : line,
-    ),
-  );
-}
+  function changeQuantity(line: CartLine, delta: number) {
+    const key = lineKey(line.id, line.presentationId);
+    const maxQuantity = Math.floor(
+      (line.currentStock - unitsInCart(cart, line.id, [key])) / lineUnitsPer(line),
+    );
+    setCart((current) =>
+      current
+        .map((item) => {
+          if (lineKey(item.id, item.presentationId) !== key) return item;
+          const quantity = Math.min(maxQuantity, item.quantity + delta);
+          const discountCents = Math.min(item.discountCents ?? 0, lineUnitCents(item) * quantity);
+          return {
+            ...item,
+            quantity,
+            discountCents: discountCents > 0 ? discountCents : undefined,
+          };
+        })
+        .filter((item) => item.quantity > 0),
+    );
+  }
+  function changePresentation(line: CartLine, presentationId: string | null) {
+    if ((line.presentationId ?? null) === presentationId) return;
+    const next = findPresentation(line.presentations, presentationId);
+    if (presentationId && !next) return;
+    const perUnit = next?.unitsPerPresentation ?? 1;
+    const oldKey = lineKey(line.id, line.presentationId);
+    const newKey = lineKey(line.id, presentationId);
+    const others = unitsInCart(cart, line.id, [oldKey, newKey]);
+    const maxQuantity = Math.floor((line.currentStock - others) / perUnit);
+    if (maxQuantity < 1) {
+      toast.error("No hay suficiente inventario para esa presentación.");
+      return;
+    }
+    const target = cart.find((item) => lineKey(item.id, item.presentationId) === newKey);
+    const quantity = Math.min(maxQuantity, line.quantity + (target?.quantity ?? 0));
+    setCart((current) => {
+      const result: CartLine[] = [];
+      for (const item of current) {
+        const itemKey = lineKey(item.id, item.presentationId);
+        if (itemKey === oldKey) {
+          result.push({ ...item, presentationId, quantity, discountCents: undefined });
+        } else if (itemKey !== newKey) {
+          result.push(item);
+        }
+      }
+      return result;
+    });
+  }
+  function setDiscount(key: string, discountCents: number) {
+    setCart((current) =>
+      current.map((item) =>
+        lineKey(item.id, item.presentationId) === key
+          ? { ...item, discountCents: discountCents > 0 ? discountCents : undefined }
+          : item,
+      ),
+    );
+  }
+  function removeLine(key: string) {
+    setCart((current) => current.filter((item) => lineKey(item.id, item.presentationId) !== key));
+  }
   function checkout() {
     if (!cart.length || !cashValid) return;
     startTransition(async () => {
       const result = await createSale(
-        cart.map(({ id, quantity, discountCents }) => ({ productId: id, quantity, discountCents })),
+        cart.map(({ id, presentationId, quantity, discountCents }) => ({
+          productId: id,
+          presentationId,
+          quantity,
+          discountCents,
+        })),
         paymentMethod,
         paymentMethod === "Efectivo" ? receivedCents! : undefined,
         totalCents,
@@ -232,35 +319,65 @@ function setDiscount(id: string, discountCents: number) {
           {products.length ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {products.map((product) => (
-                <button
-                  key={product.id}
-                  type="button"
-                  disabled={product.currentStock <= 0}
-                  onClick={() => add(product)}
-                  className="group rounded-2xl border bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <div className="mb-4 flex items-start justify-between">
-                    <span className="flex size-10 items-center justify-center rounded-xl bg-secondary text-primary">
-                      <ShoppingBag className="size-5" />
-                    </span>
-                    <Badge variant={product.currentStock > 0 ? "outline" : "destructive"}>
-                      {product.currentStock > 0 ? `${product.currentStock} disp.` : "Agotado"}
-                    </Badge>
-                  </div>
-                  <p className="line-clamp-2 min-h-10 font-semibold leading-5">{product.name}</p>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {product.sku}
-                    {product.categoryName ? ` · ${product.categoryName}` : ""}
-                  </p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-lg font-bold text-primary">
-                      {formatMoney(Number(product.salePrice))}
-                    </span>
-                    <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition group-hover:scale-105">
-                      <Plus className="size-4" />
-                    </span>
-                  </div>
-                </button>
+                <div key={product.id} className="space-y-2">
+                  <button
+                    type="button"
+                    disabled={product.currentStock <= 0}
+                    onClick={() => {
+                      if (!add(product)) toast.error("No hay más existencias de este producto.");
+                    }}
+                    className="group w-full rounded-2xl border bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <div className="mb-4 flex items-start justify-between">
+                      <span className="flex size-10 items-center justify-center rounded-xl bg-secondary text-primary">
+                        <ShoppingBag className="size-5" />
+                      </span>
+                      <Badge variant={product.currentStock > 0 ? "outline" : "destructive"}>
+                        {product.currentStock > 0 ? `${product.currentStock} disp.` : "Agotado"}
+                      </Badge>
+                    </div>
+                    <p className="line-clamp-2 min-h-10 font-semibold leading-5">{product.name}</p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {product.sku}
+                      {product.categoryName ? ` · ${product.categoryName}` : ""}
+                    </p>
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-lg font-bold text-primary">
+                        {formatMoney(Number(product.salePrice))}
+                        {product.presentations.length > 0 && (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            individual
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition group-hover:scale-105">
+                        <Plus className="size-4" />
+                      </span>
+                    </div>
+                  </button>
+                  {product.presentations.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {product.presentations.map((presentation) => (
+                        <Button
+                          key={presentation.id}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={product.currentStock < presentation.unitsPerPresentation}
+                          onClick={() => {
+                            if (!add(product, presentation.id))
+                              toast.error(
+                                `No hay suficiente inventario para agregar ${presentation.name.toLowerCase()}.`,
+                              );
+                          }}
+                        >
+                          <Plus /> {presentation.name} x{presentation.unitsPerPresentation} ·{" "}
+                          {formatMoney(Number(presentation.salePrice))}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           ) : (
@@ -290,72 +407,106 @@ function setDiscount(id: string, discountCents: number) {
           {cart.length ? (
             <div className="max-h-[340px] space-y-3 overflow-y-auto pr-1">
               {cart.map((line) => {
-  const unitCents = Math.round(Number(line.salePrice) * 100);
-  const lineSubtotal = unitCents * line.quantity;
-  return (
-                <div key={line.id} className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
-                  <div className="min-w-0 flex-1">
-  <p className="truncate text-sm font-semibold">{line.name}</p>
-  <p className="text-xs text-muted-foreground">
-    {formatMoney(Number(line.salePrice))} c/u
-  </p>
-  {line.discountCents ? (
-    <p className="text-xs">
-      <span className="text-muted-foreground line-through">{formatMoney(lineSubtotal / 100)}</span>{" "}
-      <span className="font-semibold text-primary">
-        {formatMoney((lineSubtotal - line.discountCents) / 100)}
-      </span>{" "}
-      <Badge variant="secondary">−{formatMoney(line.discountCents / 100)}</Badge>
-    </p>
-  ) : null}
-</div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-xs"
-                      aria-label="Quitar una unidad"
-                      onClick={() => changeQuantity(line.id, -1)}
-                    >
-                      <Minus />
-                    </Button>
-                    <span className="w-7 text-center text-sm font-bold tabular-nums">
-                      {line.quantity}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-xs"
-                      aria-label="Agregar una unidad"
-                      disabled={line.quantity >= line.currentStock}
-                      onClick={() => changeQuantity(line.id, 1)}
-                    >
-                      <Plus />
-                    </Button>
-                  </div>
-                  {canDiscount && (
-  <DiscountPopover
-    name={line.name}
-    subtotalCents={lineSubtotal}
-    discountCents={line.discountCents ?? 0}
-    onApply={(cents) => setDiscount(line.id, cents)}
-  />
-)}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Quitar ${line.name}`}
-                    
-                    onClick={() =>
-                      setCart((current) => current.filter((item) => item.id !== line.id))
-                    }
-                  >
-                    <X />
-                  </Button>
-                </div>
+                const key = lineKey(line.id, line.presentationId);
+                const presentation = findPresentation(line.presentations, line.presentationId);
+                const unitCents = lineUnitCents(line);
+                const lineSubtotal = unitCents * line.quantity;
+                const maxQuantity = Math.floor(
+                  (line.currentStock - unitsInCart(cart, line.id, [key])) / lineUnitsPer(line),
                 );
-})}
+                const options: { id: string | null; label: string }[] = [
+                  { id: null, label: "Individual" },
+                  ...line.presentations.map((item) => ({ id: item.id, label: item.name })),
+                ];
+                return (
+                  <div key={key} className="space-y-2 rounded-xl bg-muted/50 p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{line.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatMoney(unitCents / 100)}{" "}
+                          {presentation
+                            ? `por ${presentation.name.toLowerCase()} (${presentation.unitsPerPresentation} unid.)`
+                            : "c/u"}
+                        </p>
+                        {line.discountCents ? (
+                          <p className="text-xs">
+                            <span className="text-muted-foreground line-through">
+                              {formatMoney(lineSubtotal / 100)}
+                            </span>{" "}
+                            <span className="font-semibold text-primary">
+                              {formatMoney((lineSubtotal - line.discountCents) / 100)}
+                            </span>{" "}
+                            <Badge variant="secondary">
+                              −{formatMoney(line.discountCents / 100)}
+                            </Badge>
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-xs"
+                          aria-label="Quitar una unidad"
+                          onClick={() => changeQuantity(line, -1)}
+                        >
+                          <Minus />
+                        </Button>
+                        <span className="w-7 text-center text-sm font-bold tabular-nums">
+                          {line.quantity}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-xs"
+                          aria-label="Agregar una unidad"
+                          disabled={line.quantity >= maxQuantity}
+                          onClick={() => changeQuantity(line, 1)}
+                        >
+                          <Plus />
+                        </Button>
+                      </div>
+                      {canDiscount && (
+                        <DiscountPopover
+                          name={line.name}
+                          subtotalCents={lineSubtotal}
+                          discountCents={line.discountCents ?? 0}
+                          onApply={(cents) => setDiscount(key, cents)}
+                        />
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Quitar ${line.name}`}
+                        onClick={() => removeLine(key)}
+                      >
+                        <X />
+                      </Button>
+                    </div>
+                    {line.presentations.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {options.map((option) => (
+                          <Button
+                            key={option.id ?? "individual"}
+                            type="button"
+                            size="sm"
+                            variant={
+                              (line.presentationId ?? null) === option.id ? "secondary" : "outline"
+                            }
+                            aria-pressed={(line.presentationId ?? null) === option.id}
+                            className="h-7 px-2 text-xs"
+                            onClick={() => changePresentation(line, option.id)}
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed text-center">
@@ -382,17 +533,19 @@ function setDiscount(id: string, discountCents: number) {
             </Select>
           </div>
           {discountTotalCents > 0 && (
-  <div className="space-y-1 border-t pt-3 text-sm">
-    <div className="flex justify-between">
-      <span className="text-muted-foreground">Subtotal</span>
-      <span className="tabular-nums">{formatMoney(subtotalCents / 100)}</span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-muted-foreground">Descuentos</span>
-      <span className="tabular-nums text-primary">−{formatMoney(discountTotalCents / 100)}</span>
-    </div>
-  </div>
-)}
+            <div className="space-y-1 border-t pt-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="tabular-nums">{formatMoney(subtotalCents / 100)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Descuentos</span>
+                <span className="tabular-nums text-primary">
+                  −{formatMoney(discountTotalCents / 100)}
+                </span>
+              </div>
+            </div>
+          )}
           <div className="flex items-end justify-between border-t pt-4">
             <span className="text-sm text-muted-foreground">Total a cobrar</span>
             <span className="text-3xl font-bold tabular-nums">{formatMoney(total)}</span>
@@ -493,13 +646,19 @@ function setDiscount(id: string, discountCents: number) {
             negocio="Buen Negocio"
             comprobante={`Venta #${ticket.number}`}
             fecha={ticket.soldAt}
-            lineas={ticket.lines.map((line) => ({
-              descripcion: line.name,
-              cantidad: line.quantity,
-              precioUnitario: Number(line.salePrice),
-              total: Number(line.salePrice) * line.quantity,
-              descuento: line.discountCents ? line.discountCents / 100 : undefined,
-            }))}
+            lineas={ticket.lines.map((line) => {
+              const presentation = findPresentation(line.presentations, line.presentationId);
+              const unitCents = lineUnitCents(line);
+              return {
+                descripcion: presentation
+                  ? `${line.name} (${presentation.name} x${presentation.unitsPerPresentation})`
+                  : line.name,
+                cantidad: line.quantity,
+                precioUnitario: unitCents / 100,
+                total: (unitCents * line.quantity) / 100,
+                descuento: line.discountCents ? line.discountCents / 100 : undefined,
+              };
+            })}
             total={ticket.total}
             pago={ticket.paymentMethod}
           />
@@ -592,7 +751,13 @@ function SaleCard({ sale, canManageSales }: { sale: Sale; canManageSales: boolea
               artículos
             </p>
             <p className="mt-2 line-clamp-1 text-xs text-muted-foreground">
-              {sale.lines.map((line) => `${line.quantity} × ${line.productName}`).join(" · ")}
+              {sale.lines
+                .map((line) =>
+                  line.presentationName && line.presentationQty
+                    ? `${line.presentationQty} × ${line.presentationName} de ${line.productName}`
+                    : `${line.quantity} × ${line.productName}`,
+                )
+                .join(" · ")}
             </p>
           </div>
           <div className="text-right">
