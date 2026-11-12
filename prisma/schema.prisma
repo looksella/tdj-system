@@ -477,6 +477,7 @@ model Presentacion {
   name                 String
   unitsPerPresentation Int      @map("units_per_presentation")
   salePrice            Decimal  @map("sale_price") @db.Decimal(12, 2)
+  closedStock          Int      @default(0) @map("closed_stock")
   barcode              String?  @unique
   isActive             Boolean  @default(true) @map("is_active")
   createdAt            DateTime @default(now()) @map("created_at")
