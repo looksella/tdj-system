@@ -37,7 +37,13 @@ export default async function SalesPage({
         presentations: {
           where: { isActive: true },
           orderBy: { unitsPerPresentation: "asc" },
-          select: { id: true, name: true, unitsPerPresentation: true, salePrice: true },
+          select: {
+            id: true,
+            name: true,
+            unitsPerPresentation: true,
+            salePrice: true,
+            closedStock: true,
+          },
         },
       },
     }),
@@ -66,6 +72,7 @@ export default async function SalesPage({
           name: presentation.name,
           unitsPerPresentation: presentation.unitsPerPresentation,
           salePrice: presentation.salePrice.toString(),
+          closedStock: presentation.closedStock,
         })),
       }))}
       sales={sales.map((sale) => ({

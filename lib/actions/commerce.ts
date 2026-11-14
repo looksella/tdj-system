@@ -6,11 +6,11 @@ import { denialForFeature } from "@/lib/features/guard";
 import { discountedLineCents } from "@/lib/pricing";
 import { autorizarAccion, autorizarAlgunaAccion, guardAccion } from "@/lib/guard-autorizacion";
 import { cashMethodFromSale, lockCashOperations } from "@/lib/caja";
-import { categorySkuPrefix, nextAvailableProductSku } from "@/lib/product-sku";
+import { nextAvailableProductSku, normalizeManualSku, productSkuPrefix } from "@/lib/product-sku";
 import { parseBarcode } from "@/lib/product-barcode";
 import { productImageStoragePath } from "@/lib/product-image";
 import { borrarArchivos, storageActivo } from "@/lib/beon-storage";
-import { baseUnits } from "@/lib/presentations";
+import { baseUnits, looseUnits, normalizeClosed, type ClosedItem } from "@/lib/presentations";
 
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -120,6 +120,8 @@ type PresentationInput = {
   unitsPerPresentation: number;
   salePrice: string;
   barcode: string | null;
+  /** Cuántas hay cerradas (sin abrir). El resto de las unidades están sueltas. */
+  closedStock: number;
 };
 
 function presentationsInput(formData: FormData): PresentationInput[] {
@@ -139,6 +141,8 @@ function presentationsInput(formData: FormData): PresentationInput[] {
     const name = typeof row.name === "string" ? row.name.trim() : "";
     const units = Number(row.unitsPerPresentation);
     const price = Number(row.salePrice);
+    const closed =
+      row.closedStock === undefined || row.closedStock === "" ? 0 : Number(row.closedStock);
     const barcode = parseBarcode(typeof row.barcode === "string" ? row.barcode.trim() : "");
     if (!name || name.length > 40) throw new Error("Cada presentación necesita un nombre corto.");
     if (!Number.isInteger(units) || units < 2 || units > 10000) {
@@ -147,10 +151,19 @@ function presentationsInput(formData: FormData): PresentationInput[] {
     if (!Number.isFinite(price) || price < 0) {
       throw new Error(`Revisa el precio de “${name}”.`);
     }
+    if (!Number.isInteger(closed) || closed < 0 || closed > 1_000_000) {
+      throw new Error(`Revisa cuántas “${name}” hay sin abrir.`);
+    }
     const key = name.toLowerCase();
     if (names.has(key)) throw new Error("Hay dos presentaciones con el mismo nombre.");
     names.add(key);
-    return { name, unitsPerPresentation: units, salePrice: price.toFixed(2), barcode };
+    return {
+      name,
+      unitsPerPresentation: units,
+      salePrice: price.toFixed(2),
+      barcode,
+      closedStock: closed,
+    };
   });
 }
 
@@ -192,6 +205,7 @@ async function syncPresentations(
       unitsPerPresentation: input.unitsPerPresentation,
       salePrice: input.salePrice,
       barcode: input.barcode,
+      closedStock: input.closedStock,
       isActive: true,
     };
     await tx.presentacion.upsert({
@@ -199,6 +213,46 @@ async function syncPresentations(
       update: data,
       create: { productId, name: input.name, ...data },
     });
+  }
+}
+
+/** Las presentaciones sin abrir tienen que caber dentro del total de unidades. */
+function assertClosedFits(totalUnits: number, inputs: PresentationInput[]) {
+  const items: ClosedItem[] = inputs.map((input) => ({
+    id: input.name,
+    unitsPerPresentation: input.unitsPerPresentation,
+    closed: input.closedStock,
+  }));
+  const loose = looseUnits(totalUnits, items);
+  if (loose < 0) {
+    throw new Error(
+      `Las presentaciones sin abrir no caben en las existencias: hay ${totalUnits} unidades en total y ${totalUnits - loose} irían dentro de presentaciones sin abrir.`,
+    );
+  }
+}
+
+/** Si el total de unidades ya no alcanza para lo que hay sin abrir, abre las presentaciones necesarias. */
+async function reconcileClosedStock(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  totalUnits: number,
+) {
+  const rows = await tx.presentacion.findMany({
+    where: { productId, closedStock: { gt: 0 } },
+    select: { id: true, unitsPerPresentation: true, closedStock: true },
+  });
+  if (!rows.length) return;
+  const before: ClosedItem[] = rows.map((row) => ({
+    id: row.id,
+    unitsPerPresentation: row.unitsPerPresentation,
+    closed: row.closedStock,
+  }));
+  const after = normalizeClosed(totalUnits, before);
+  for (const item of after) {
+    const old = before.find((entry) => entry.id === item.id);
+    if (old && old.closed !== item.closed) {
+      await tx.presentacion.update({ where: { id: item.id }, data: { closedStock: item.closed } });
+    }
   }
 }
 
@@ -222,13 +276,13 @@ async function deleteProductImage(imageUrl: string | null) {
   }
 }
 
-async function nextProductSku(tx: Prisma.TransactionClient, categoryId: string) {
+async function nextProductSku(tx: Prisma.TransactionClient, categoryId: string, productName = "") {
   const category = categoryId
     ? await tx.categoria.findUnique({ where: { id: categoryId }, select: { categoryName: true } })
     : null;
   if (categoryId && !category) throw new Error("La categoría seleccionada no existe.");
 
-  const prefix = categorySkuPrefix(category?.categoryName ?? null);
+  const prefix = productSkuPrefix(category?.categoryName ?? null, productName);
   const existingSkus = await tx.producto.findMany({
     where: { sku: { startsWith: `${prefix}-` } },
     select: { sku: true },
@@ -239,11 +293,33 @@ async function nextProductSku(tx: Prisma.TransactionClient, categoryId: string) 
   );
 }
 
-export async function suggestProductSku(categoryId: string) {
+async function rejectSkuTaken(tx: Prisma.TransactionClient, sku: string) {
+  const sameSku = await tx.producto.findFirst({
+    where: { sku: { equals: sku, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (sameSku) {
+    throw new Error(
+      "Ya existe otro producto con ese código. Escribe uno distinto o vuelve a generarlo.",
+    );
+  }
+  const asBarcode = await tx.producto.findFirst({ where: { barcode: sku }, select: { id: true } });
+  const asPresentation = await tx.presentacion.findFirst({
+    where: { barcode: sku },
+    select: { id: true },
+  });
+  if (asBarcode || asPresentation) {
+    throw new Error("Ese código ya se usa como código de barras de otro producto.");
+  }
+}
+
+export async function suggestProductSku(categoryId: string, productName = "") {
   const denial = await guardAccion("inventory:manage");
   if (denial) return { ok: false as const, message: denial };
   try {
-    const sku = await db.$transaction((tx) => nextProductSku(tx, categoryId.trim()));
+    const sku = await db.$transaction((tx) =>
+      nextProductSku(tx, categoryId.trim(), productName.trim()),
+    );
     return { ok: true as const, sku };
   } catch (error) {
     return {
@@ -272,7 +348,13 @@ export async function createProduct(formData: FormData): Promise<CreateProductRe
       throw new Error("La cantidad inicial debe ser un número entero de cero o más.");
     }
     const presentations = formData.has("presentations") ? presentationsInput(formData) : null;
+    if (presentations) assertClosedFits(initialStock, presentations);
     const categoryId = text(formData.get("categoryId"));
+    const productName = text(formData.get("name"));
+    const manualSku =
+      text(formData.get("skuMode")) === "manual"
+        ? normalizeManualSku(text(formData.get("sku")))
+        : null;
     let sku = "";
     let createdProduct: {
       id: string;
@@ -283,7 +365,8 @@ export async function createProduct(formData: FormData): Promise<CreateProductRe
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
         const created = await db.$transaction(async (tx) => {
-          const generatedSku = await nextProductSku(tx, categoryId);
+          const generatedSku = manualSku ?? (await nextProductSku(tx, categoryId, productName));
+          if (manualSku) await rejectSkuTaken(tx, manualSku);
           const input = productInput(formData, generatedSku);
           await rejectBarcodeSkuCollision(tx, input.barcode);
           const product = await tx.producto.create({
@@ -325,6 +408,7 @@ export async function createProduct(formData: FormData): Promise<CreateProductRe
         break;
       } catch (error) {
         const isSkuCollision =
+          !manualSku &&
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === "P2002" &&
           !uniqueViolationIncludes(error, "barcode");
@@ -345,6 +429,13 @@ export async function createProduct(formData: FormData): Promise<CreateProductRe
     if (uniqueViolationIncludes(error, "barcode")) {
       return { ok: false as const, message: "Ese código de barras ya pertenece a otro producto." };
     }
+    if (uniqueViolationIncludes(error, "sku")) {
+      return {
+        ok: false as const,
+        message:
+          "Ya existe otro producto con ese código. Escribe uno distinto o vuelve a generarlo.",
+      };
+    }
     return {
       ok: false as const,
       message: error instanceof Error ? error.message : "No se pudo guardar el producto.",
@@ -364,6 +455,11 @@ export async function updateProduct(id: string, formData: FormData) {
       });
       const presentations = formData.has("presentations") ? presentationsInput(formData) : null;
       if (presentations) {
+        const stockRow = await tx.producto.findUnique({
+          where: { id },
+          select: { currentStock: true },
+        });
+        assertClosedFits(stockRow?.currentStock ?? 0, presentations);
         await rejectPresentationBarcodeCollisions(tx, presentations, id);
         await syncPresentations(tx, id, presentations);
       }
@@ -466,6 +562,8 @@ export type ProductPresentation = {
   name: string;
   unitsPerPresentation: number;
   salePrice: string;
+  /** Cuántas hay sin abrir (las únicas que se pueden vender como presentación). */
+  closedStock: number;
 };
 
 export type ScannedProduct = {
@@ -498,7 +596,13 @@ const scannedProductSelect = {
   presentations: {
     where: { isActive: true },
     orderBy: { unitsPerPresentation: "asc" },
-    select: { id: true, name: true, unitsPerPresentation: true, salePrice: true },
+    select: {
+      id: true,
+      name: true,
+      unitsPerPresentation: true,
+      salePrice: true,
+      closedStock: true,
+    },
   },
 } satisfies Prisma.ProductoSelect;
 
@@ -521,6 +625,7 @@ function toScannedProduct(
       name: presentation.name,
       unitsPerPresentation: presentation.unitsPerPresentation,
       salePrice: presentation.salePrice.toString(),
+      closedStock: presentation.closedStock,
     })),
     scannedPresentationId,
   };
@@ -579,6 +684,7 @@ export async function adjustStock(id: string, delta: number, note: string) {
         where: { id },
         data: { currentStock: { increment: delta }, updatedBy: authorization.usuario.id },
       });
+      await reconcileClosedStock(tx, id, product.currentStock + delta);
       await tx.movimientoStock.create({
         data: {
           productId: id,
@@ -624,7 +730,13 @@ export async function searchPosProducts(term: string) {
       presentations: {
         where: { isActive: true },
         orderBy: { unitsPerPresentation: "asc" },
-        select: { id: true, name: true, unitsPerPresentation: true, salePrice: true },
+        select: {
+          id: true,
+          name: true,
+          unitsPerPresentation: true,
+          salePrice: true,
+          closedStock: true,
+        },
       },
     },
     orderBy: { name: "asc" },
@@ -642,6 +754,7 @@ export async function searchPosProducts(term: string) {
       name: presentation.name,
       unitsPerPresentation: presentation.unitsPerPresentation,
       salePrice: presentation.salePrice.toString(),
+      closedStock: presentation.closedStock,
     })),
   }));
 }
@@ -730,6 +843,10 @@ export async function createSale(
           : undefined;
         if (line.presentationId && !presentation)
           throw new Error(`La presentación de ${product.name} ya no está disponible.`);
+        if (presentation && line.quantity > presentation.closedStock)
+          throw new Error(
+            `No hay suficientes ${presentation.name.toLowerCase()} sin abrir de ${product.name}. Quedan ${presentation.closedStock}.`,
+          );
         const units = presentation
           ? baseUnits(line.quantity, presentation.unitsPerPresentation)
           : line.quantity;
@@ -780,6 +897,16 @@ export async function createSale(
         });
         if (changed.count !== 1)
           throw new Error(`El inventario de ${item.product.name} cambió; intenta cobrar de nuevo.`);
+        if (item.presentation) {
+          const closedChanged = await tx.presentacion.updateMany({
+            where: { id: item.presentation.id, closedStock: { gte: item.quantity } },
+            data: { closedStock: { decrement: item.quantity } },
+          });
+          if (closedChanged.count !== 1)
+            throw new Error(
+              `Las ${item.presentation.name.toLowerCase()} de ${item.product.name} cambiaron; intenta cobrar de nuevo.`,
+            );
+        }
         await tx.lineaVenta.create({
           data: {
             saleId: createdSale.id,
@@ -806,6 +933,13 @@ export async function createSale(
             createdByEmail: actorEmail,
           },
         });
+      }
+      for (const productId of unitsByProduct.keys()) {
+        const fresh = await tx.producto.findUnique({
+          where: { id: productId },
+          select: { currentStock: true },
+        });
+        await reconcileClosedStock(tx, productId, fresh?.currentStock ?? 0);
       }
       return createdSale;
     });
@@ -859,6 +993,13 @@ export async function cancelSale(id: string) {
           where: { id: line.productId },
           data: { currentStock: { increment: line.quantity }, updatedBy: actorId },
         });
+        if (line.presentationName && line.presentationQty) {
+          // Una caja vendida vuelve como caja sin abrir. Si ya no existe, vuelve como unidades sueltas.
+          await tx.presentacion.updateMany({
+            where: { productId: line.productId, name: line.presentationName },
+            data: { closedStock: { increment: line.presentationQty } },
+          });
+        }
         await tx.movimientoStock.create({
           data: {
             productId: line.productId,
@@ -929,7 +1070,22 @@ export type PurchaseInput = {
   reference?: string;
   note?: string;
   purchasedAt: string;
-  lines: Array<{ productId: string; quantity: number; unitCost: number }>;
+  /**
+   * Si viene `presentationId`, `quantity` cuenta presentaciones (por ejemplo 3 cajas) y
+   * `unitCost` es el costo de UNA presentación. Si no, son unidades individuales.
+   */
+  lines: Array<{
+    productId: string;
+    presentationId?: string | null;
+    quantity: number;
+    unitCost: number;
+  }>;
+};
+type ParsedPurchaseLine = {
+  productId: string;
+  presentationId: string | null;
+  quantity: number;
+  unitCost: number;
 };
 function purchaseInput(input: PurchaseInput) {
   const supplierName = input.supplierName.trim();
@@ -942,8 +1098,9 @@ function purchaseInput(input: PurchaseInput) {
   ) {
     throw new Error("Indica el proveedor, la fecha y al menos un producto.");
   }
-  const lines = new Map<string, { quantity: number; unitCost: number }>();
+  const lines = new Map<string, ParsedPurchaseLine>();
   for (const line of input.lines) {
+    const presentationId = line.presentationId ? line.presentationId : null;
     if (
       !line.productId ||
       !Number.isInteger(line.quantity) ||
@@ -953,8 +1110,11 @@ function purchaseInput(input: PurchaseInput) {
     ) {
       throw new Error("Revisa las cantidades y los costos de los productos.");
     }
-    const current = lines.get(line.productId);
-    lines.set(line.productId, {
+    const key = `${line.productId}|${presentationId ?? ""}`;
+    const current = lines.get(key);
+    lines.set(key, {
+      productId: line.productId,
+      presentationId,
       quantity: (current?.quantity ?? 0) + line.quantity,
       unitCost: line.unitCost,
     });
@@ -966,6 +1126,95 @@ function purchaseInput(input: PurchaseInput) {
     note: input.note?.trim() || null,
     lines,
   };
+}
+
+type ClosedChange = { productId: string; name: string; qty: number };
+
+/** Valida productos y presentaciones y calcula unidades, líneas a guardar y presentaciones sin abrir. */
+async function resolvePurchaseLines(
+  tx: Prisma.TransactionClient,
+  lines: Map<string, ParsedPurchaseLine>,
+  requireActive: boolean,
+) {
+  const parsedLines = [...lines.values()];
+  const productIds = [...new Set(parsedLines.map((line) => line.productId))];
+  const presentationIds = [
+    ...new Set(parsedLines.flatMap((line) => (line.presentationId ? [line.presentationId] : []))),
+  ];
+  const products = await tx.producto.findMany({
+    where: { id: { in: productIds }, ...(requireActive ? { isActive: true } : {}) },
+    select: { id: true },
+  });
+  if (products.length !== productIds.length)
+    throw new Error("Uno de los productos ya no está disponible.");
+  const presentations = presentationIds.length
+    ? await tx.presentacion.findMany({
+        where: { id: { in: presentationIds }, isActive: true },
+        select: { id: true, productId: true, name: true, unitsPerPresentation: true },
+      })
+    : [];
+  const presentationById = new Map(presentations.map((item) => [item.id, item]));
+  const unitsByProduct = new Map<string, number>();
+  const closedByKey = new Map<string, ClosedChange>();
+  const lineData = parsedLines.map((line) => {
+    const presentation = line.presentationId
+      ? presentationById.get(line.presentationId)
+      : undefined;
+    if (line.presentationId && (!presentation || presentation.productId !== line.productId))
+      throw new Error("Una de las presentaciones ya no está disponible.");
+    const units = presentation
+      ? baseUnits(line.quantity, presentation.unitsPerPresentation)
+      : line.quantity;
+    unitsByProduct.set(line.productId, (unitsByProduct.get(line.productId) ?? 0) + units);
+    if (presentation) {
+      const key = `${line.productId}|${presentation.name}`;
+      closedByKey.set(key, {
+        productId: line.productId,
+        name: presentation.name,
+        qty: (closedByKey.get(key)?.qty ?? 0) + line.quantity,
+      });
+    }
+    return {
+      productId: line.productId,
+      quantity: units,
+      unitCost: line.unitCost.toFixed(2),
+      lineTotal: (line.quantity * line.unitCost).toFixed(2),
+      presentationName: presentation?.name ?? null,
+      presentationQty: presentation ? line.quantity : null,
+      unitsPerPresentation: presentation?.unitsPerPresentation ?? null,
+    };
+  });
+  return { lineData, unitsByProduct, closedByKey };
+}
+
+/** Las presentaciones compradas entran sin abrir; si se reduce una compra, salen de las sin abrir. */
+async function applyPurchaseClosed(
+  tx: Prisma.TransactionClient,
+  deltas: Map<string, ClosedChange>,
+) {
+  for (const { productId, name, qty } of deltas.values()) {
+    if (!qty) continue;
+    if (qty > 0) {
+      await tx.presentacion.updateMany({
+        where: { productId, name },
+        data: { closedStock: { increment: qty } },
+      });
+      continue;
+    }
+    const exists = await tx.presentacion.findUnique({
+      where: { productId_name: { productId, name } },
+      select: { id: true },
+    });
+    if (!exists) continue;
+    const changed = await tx.presentacion.updateMany({
+      where: { productId, name, closedStock: { gte: -qty } },
+      data: { closedStock: { decrement: -qty } },
+    });
+    if (changed.count !== 1)
+      throw new Error(
+        `No puedes reducir esta compra: ya se vendieron o abrieron ${name.toLowerCase()} de ese producto.`,
+      );
+  }
 }
 async function applyPurchaseStock(
   tx: Prisma.TransactionClient,
@@ -984,6 +1233,13 @@ async function applyPurchaseStock(
       throw new Error(
         "No puedes reducir una compra porque dejaría el inventario por debajo de cero.",
       );
+    if (delta < 0) {
+      const fresh = await tx.producto.findUnique({
+        where: { id: productId },
+        select: { currentStock: true },
+      });
+      await reconcileClosedStock(tx, productId, fresh?.currentStock ?? 0);
+    }
     await tx.movimientoStock.create({
       data: {
         productId,
@@ -1006,20 +1262,8 @@ export async function createPurchase(input: PurchaseInput) {
   try {
     const purchase = await db.$transaction(async (tx) => {
       const parsed = purchaseInput(input);
-      const productIds = [...parsed.lines.keys()];
-      const products = await tx.producto.findMany({
-        where: { id: { in: productIds }, isActive: true },
-        select: { id: true },
-      });
-      if (products.length !== productIds.length)
-        throw new Error("Uno de los productos ya no está disponible.");
-      const lineData = [...parsed.lines.entries()].map(([productId, line]) => ({
-        productId,
-        quantity: line.quantity,
-        unitCost: line.unitCost.toFixed(2),
-        lineTotal: (line.quantity * line.unitCost).toFixed(2),
-      }));
-      const total = lineData.reduce((sum, line) => sum + Number(line.lineTotal), 0);
+      const resolved = await resolvePurchaseLines(tx, parsed.lines, true);
+      const total = resolved.lineData.reduce((sum, line) => sum + Number(line.lineTotal), 0);
       const created = await tx.compra.create({
         data: {
           supplierName: parsed.supplierName,
@@ -1027,12 +1271,13 @@ export async function createPurchase(input: PurchaseInput) {
           note: parsed.note,
           purchasedAt: parsed.purchasedAt,
           total: total.toFixed(2),
-          lines: { create: lineData },
+          lines: { create: resolved.lineData },
         },
       });
+      await applyPurchaseClosed(tx, resolved.closedByKey);
       await applyPurchaseStock(
         tx,
-        new Map(lineData.map((line) => [line.productId, line.quantity])),
+        resolved.unitsByProduct,
         `C-${created.number}`,
         actorId,
         actorEmail,
@@ -1065,29 +1310,45 @@ export async function updatePurchase(id: string, input: PurchaseInput) {
       const parsed = purchaseInput(input);
       const existing = await tx.compra.findUnique({ where: { id }, include: { lines: true } });
       if (!existing) throw new Error("No encontramos esta compra.");
-      const productIds = [
-        ...new Set([...parsed.lines.keys(), ...existing.lines.map((line) => line.productId)]),
-      ];
-      const products = await tx.producto.findMany({
-        where: { id: { in: productIds } },
-        select: { id: true },
-      });
-      if (products.length !== productIds.length)
-        throw new Error("Uno de los productos ya no está disponible.");
-      const lineData = [...parsed.lines.entries()].map(([productId, line]) => ({
-        productId,
-        quantity: line.quantity,
-        unitCost: line.unitCost.toFixed(2),
-        lineTotal: (line.quantity * line.unitCost).toFixed(2),
-      }));
-      const prior = new Map(existing.lines.map((line) => [line.productId, line.quantity]));
-      const deltas = new Map(
-        productIds.map((productId) => [
+      const resolved = await resolvePurchaseLines(tx, parsed.lines, false);
+
+      const priorUnits = new Map<string, number>();
+      const priorClosed = new Map<string, ClosedChange>();
+      for (const line of existing.lines) {
+        priorUnits.set(line.productId, (priorUnits.get(line.productId) ?? 0) + line.quantity);
+        if (line.presentationName && line.presentationQty) {
+          const key = `${line.productId}|${line.presentationName}`;
+          priorClosed.set(key, {
+            productId: line.productId,
+            name: line.presentationName,
+            qty: (priorClosed.get(key)?.qty ?? 0) + line.presentationQty,
+          });
+        }
+      }
+      const productIds = new Set([...resolved.unitsByProduct.keys(), ...priorUnits.keys()]);
+      const unitDeltas = new Map(
+        [...productIds].map((productId) => [
           productId,
-          (parsed.lines.get(productId)?.quantity ?? 0) - (prior.get(productId) ?? 0),
+          (resolved.unitsByProduct.get(productId) ?? 0) - (priorUnits.get(productId) ?? 0),
         ]),
       );
-      await applyPurchaseStock(tx, deltas, `C-${existing.number}`, actorId, actorEmail);
+      const closedKeys = new Set([...resolved.closedByKey.keys(), ...priorClosed.keys()]);
+      const closedDeltas = new Map<string, ClosedChange>();
+      for (const key of closedKeys) {
+        const next = resolved.closedByKey.get(key);
+        const prior = priorClosed.get(key);
+        const base = next ?? prior!;
+        closedDeltas.set(key, {
+          productId: base.productId,
+          name: base.name,
+          qty: (next?.qty ?? 0) - (prior?.qty ?? 0),
+        });
+      }
+
+      // Primero las presentaciones sin abrir y después el total de unidades: así el stock
+      // y lo que hay sin abrir se mantienen coherentes.
+      await applyPurchaseClosed(tx, closedDeltas);
+      await applyPurchaseStock(tx, unitDeltas, `C-${existing.number}`, actorId, actorEmail);
       await tx.compra.update({
         where: { id },
         data: {
@@ -1095,8 +1356,10 @@ export async function updatePurchase(id: string, input: PurchaseInput) {
           reference: parsed.reference,
           note: parsed.note,
           purchasedAt: parsed.purchasedAt,
-          total: lineData.reduce((sum, line) => sum + Number(line.lineTotal), 0).toFixed(2),
-          lines: { deleteMany: {}, create: lineData },
+          total: resolved.lineData
+            .reduce((sum, line) => sum + Number(line.lineTotal), 0)
+            .toFixed(2),
+          lines: { deleteMany: {}, create: resolved.lineData },
         },
       });
     });

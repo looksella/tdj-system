@@ -43,6 +43,7 @@ type PresentationView = {
   unitsPerPresentation: number;
   salePrice: string;
   barcode: string | null;
+  closedStock: number;
 };
 const SORT_COLUMNS = {
   producto: Prisma.sql`p.name`,
@@ -111,6 +112,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
           unitsPerPresentation: true,
           salePrice: true,
           barcode: true,
+          closedStock: true,
         },
       });
       for (const row of presentationRows) {
@@ -121,6 +123,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
           unitsPerPresentation: row.unitsPerPresentation,
           salePrice: row.salePrice.toString(),
           barcode: row.barcode,
+          closedStock: row.closedStock,
         });
         presentationsByProduct.set(row.productId, list);
       }

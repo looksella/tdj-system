@@ -18,7 +18,12 @@ import {
 import { createProduct, suggestProductSku, updateProduct } from "@/lib/actions/commerce";
 import { formatMoney } from "@/lib/locale";
 import { dollarsToCents } from "@/lib/pricing";
-import { isBelowCost, suggestPackagePriceCents, suggestUnitPriceCents } from "@/lib/presentations";
+import {
+  closedUnits,
+  isBelowCost,
+  suggestPackagePriceCents,
+  suggestUnitPriceCents,
+} from "@/lib/presentations";
 
 type PresentationRow = {
   id: string;
@@ -26,6 +31,7 @@ type PresentationRow = {
   unitsPerPresentation: number;
   salePrice: string;
   barcode: string | null;
+  closedStock: number;
 };
 type Product = {
   id: string;
@@ -40,10 +46,18 @@ type Product = {
   imageUrl: string | null;
   expiryDate: string | null;
   isActive: boolean;
+  currentStock?: number;
   presentations?: PresentationRow[];
 };
 type Category = { id: string; categoryName: string };
-type Draft = { key: string; name: string; units: string; salePrice: string; barcode: string };
+type Draft = {
+  key: string;
+  name: string;
+  units: string;
+  salePrice: string;
+  barcode: string;
+  closed: string;
+};
 
 const MAX_PRESENTATIONS = 4;
 
@@ -54,6 +68,7 @@ function draftsFrom(product?: Product): Draft[] {
     units: String(row.unitsPerPresentation),
     salePrice: row.salePrice,
     barcode: row.barcode ?? "",
+    closed: String(row.closedStock),
   }));
 }
 
@@ -73,6 +88,9 @@ export function ProductDialog({
   const [pending, startTransition] = useTransition();
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? "");
   const [sku, setSku] = useState(product?.sku ?? "");
+  const [name, setName] = useState(product?.name ?? "");
+  const [skuManual, setSkuManual] = useState(false);
+  const [looseStock, setLooseStock] = useState("0");
   const [salePrice, setSalePrice] = useState(product?.salePrice ?? "");
   const [purchasePrice, setPurchasePrice] = useState(product?.purchasePrice ?? "0");
   const [drafts, setDrafts] = useState<Draft[]>(() => draftsFrom(product));
@@ -81,23 +99,29 @@ export function ProductDialog({
   const editing = Boolean(product);
 
   useEffect(() => {
-    if (!open || editing) return;
+    if (!open || editing || skuManual) return;
     const requestId = ++skuRequest.current;
-    setSku("");
-    void suggestProductSku(categoryId)
-      .then((result) => {
-        if (skuRequest.current !== requestId) return;
-        if (result.ok) setSku(result.sku);
-        else toast.error(result.message);
-      })
-      .catch(() => {
-        if (skuRequest.current === requestId)
-          toast.error("No se pudo generar el código del producto.");
-      });
+    if (name.trim().length < 2) {
+      setSku("");
+      return;
+    }
+    const timer = setTimeout(() => {
+      void suggestProductSku(categoryId, name)
+        .then((result) => {
+          if (skuRequest.current !== requestId) return;
+          if (result.ok) setSku(result.sku);
+          else toast.error(result.message);
+        })
+        .catch(() => {
+          if (skuRequest.current === requestId)
+            toast.error("No se pudo generar el código del producto.");
+        });
+    }, 350);
     return () => {
+      clearTimeout(timer);
       skuRequest.current += 1;
     };
-  }, [categoryId, editing, open]);
+  }, [categoryId, name, editing, open, skuManual]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,6 +140,10 @@ export function ProductDialog({
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
     if (nextOpen) {
+      setName(product?.name ?? "");
+      setSku(product?.sku ?? "");
+      setSkuManual(false);
+      setLooseStock("0");
       setSalePrice(product?.salePrice ?? "");
       setPurchasePrice(product?.purchasePrice ?? "0");
       setDrafts(draftsFrom(product));
@@ -137,6 +165,7 @@ export function ProductDialog({
               units: "",
               salePrice: "",
               barcode: "",
+              closed: "0",
             },
           ],
     );
@@ -150,6 +179,21 @@ export function ProductDialog({
 
   const unitCents = toCents(salePrice);
   const costCents = toCents(purchasePrice);
+
+  // Presentaciones sin abrir y unidades sueltas
+  const closedTotal = closedUnits(
+    drafts.map((row) => ({
+      id: row.key,
+      unitsPerPresentation: Number(row.units) || 0,
+      closed: Math.max(0, Math.floor(Number(row.closed) || 0)),
+    })),
+  );
+  const stockKnown = editing ? typeof product?.currentStock === "number" : true;
+  const totalUnits = editing
+    ? (product?.currentStock ?? 0)
+    : Math.max(0, Math.floor(Number(looseStock) || 0)) + closedTotal;
+  const looseTotal = totalUnits - closedTotal;
+  const invalidClosed = drafts.length > 0 && stockKnown && looseTotal < 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -180,13 +224,27 @@ export function ProductDialog({
                 name="sku"
                 required
                 value={sku}
-                onChange={(event) => setSku(event.target.value)}
-                readOnly={!editing}
-                placeholder="Se genera según la categoría"
+                onChange={(event) => {
+                  setSku(event.target.value);
+                  if (!editing) setSkuManual(event.target.value.trim() !== "");
+                }}
+                placeholder={editing ? undefined : "Se genera con la categoría y el nombre"}
               />
+              <input type="hidden" name="skuMode" value={skuManual ? "manual" : "auto"} />
               {!editing && (
                 <p className="text-xs text-muted-foreground">
-                  Se genera automáticamente según la categoría.
+                  {skuManual
+                    ? "Código escrito por ti. "
+                    : "Se genera solo (clasificación-producto-número). Puedes cambiarlo. "}
+                  {skuManual && (
+                    <button
+                      type="button"
+                      className="font-semibold text-primary hover:underline"
+                      onClick={() => setSkuManual(false)}
+                    >
+                      Volver a generarlo automáticamente
+                    </button>
+                  )}
                 </p>
               )}
             </div>
@@ -196,7 +254,8 @@ export function ProductDialog({
                 id="name"
                 name="name"
                 required
-                defaultValue={product?.name}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
                 placeholder="Nombre del producto"
               />
             </div>
@@ -308,7 +367,8 @@ export function ProductDialog({
               <p className="text-sm font-semibold">Presentaciones (opcional)</p>
               <p className="text-xs text-muted-foreground">
                 Si este producto también se vende por paquete, fardo o caja, agrégalo aquí con su
-                propio precio. Las existencias siempre se cuentan en unidades individuales.
+                propio precio. Las existencias se cuentan en unidades individuales, y aquí indicas
+                cuántas presentaciones siguen sin abrir.
               </p>
             </div>
             <input
@@ -320,6 +380,7 @@ export function ProductDialog({
                   unitsPerPresentation: Number(row.units),
                   salePrice: row.salePrice,
                   barcode: row.barcode,
+                  closedStock: Math.max(0, Math.floor(Number(row.closed) || 0)),
                 })),
               )}
             />
@@ -394,17 +455,33 @@ export function ProductDialog({
                       />
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor={`pres-barcode-${row.key}`}>
-                      Código de barras de la caja (opcional)
-                    </Label>
-                    <Input
-                      id={`pres-barcode-${row.key}`}
-                      maxLength={64}
-                      autoComplete="off"
-                      value={row.barcode}
-                      onChange={(event) => updateDraft(row.key, { barcode: event.target.value })}
-                    />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`pres-closed-${row.key}`}>Sin abrir (completas)</Label>
+                      <Input
+                        id={`pres-closed-${row.key}`}
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={row.closed}
+                        onChange={(event) => updateDraft(row.key, { closed: event.target.value })}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Las que ya abriste no cuentan aquí: sus unidades quedan como sueltas.
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`pres-barcode-${row.key}`}>
+                        Código de barras de la caja (opcional)
+                      </Label>
+                      <Input
+                        id={`pres-barcode-${row.key}`}
+                        maxLength={64}
+                        autoComplete="off"
+                        value={row.barcode}
+                        onChange={(event) => updateDraft(row.key, { barcode: event.target.value })}
+                      />
+                    </div>
                   </div>
                   {suggestedUnit > 0 && (
                     <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -460,9 +537,32 @@ export function ProductDialog({
                 <Plus /> Agregar presentación
               </Button>
             )}
+            {drafts.length > 0 && stockKnown && (
+              <div
+                aria-live="polite"
+                className={
+                  invalidClosed
+                    ? "rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive"
+                    : "rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground"
+                }
+              >
+                {invalidClosed ? (
+                  <p className="font-semibold">
+                    Las presentaciones sin abrir ({closedTotal} unidades) no caben en las
+                    existencias ({totalUnits} unidades). Baja las sin abrir o ajusta las
+                    existencias.
+                  </p>
+                ) : (
+                  <p>
+                    Total disponible: <strong>{totalUnits} unidades</strong> · dentro de
+                    presentaciones sin abrir: {closedTotal} · sueltas: {looseTotal}.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
-          {!editing && (
+          {!editing && drafts.length === 0 && (
             <div className="space-y-2">
               <Label htmlFor="initialStock">Cantidad inicial (opcional)</Label>
               <Input
@@ -474,8 +574,25 @@ export function ProductDialog({
                 defaultValue={0}
               />
               <p className="text-xs text-muted-foreground">
-                En unidades individuales. Si tienes 12 paquetes de 10, escribe 120. Se registran
-                como inventario inicial.
+                En unidades individuales. Se registran como inventario inicial.
+              </p>
+            </div>
+          )}
+          {!editing && drafts.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="looseStock">Unidades sueltas (opcional)</Label>
+              <Input
+                id="looseStock"
+                type="number"
+                min="0"
+                step="1"
+                value={looseStock}
+                onChange={(event) => setLooseStock(event.target.value)}
+              />
+              <input type="hidden" name="initialStock" value={totalUnits} />
+              <p className="text-xs text-muted-foreground">
+                Las unidades que están fuera de las presentaciones sin abrir. Si tienes 1 caja de 60
+                sin abrir y 50 sobres sueltos, escribe 50: el total será 110.
               </p>
             </div>
           )}
@@ -489,7 +606,7 @@ export function ProductDialog({
             Disponible para la venta
           </label>
           <DialogFooter>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || invalidClosed}>
               {pending ? "Guardando…" : editing ? "Guardar cambios" : "Agregar al inventario"}
             </Button>
           </DialogFooter>

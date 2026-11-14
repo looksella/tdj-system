@@ -52,6 +52,8 @@ type PosPresentation = {
   name: string;
   unitsPerPresentation: number;
   salePrice: string;
+  /** Cuántas hay sin abrir: solo esas se pueden vender como presentación. */
+  closedStock: number;
 };
 type Product = {
   id: string;
@@ -112,6 +114,16 @@ function unitsInCart(cart: CartLine[], productId: string, exceptKeys: string[] =
     if (exceptKeys.includes(lineKey(line.id, line.presentationId))) return sum;
     return sum + line.quantity * lineUnitsPer(line);
   }, 0);
+}
+
+/** Máximo que se puede llevar en una línea: por existencias y, si es presentación, por las sin abrir. */
+function maxQuantityFor(line: CartLine, cart: CartLine[]) {
+  const presentation = findPresentation(line.presentations, line.presentationId);
+  const others = unitsInCart(cart, line.id, [lineKey(line.id, line.presentationId)]);
+  const byStock = Math.floor(
+    (line.currentStock - others) / (presentation?.unitsPerPresentation ?? 1),
+  );
+  return presentation ? Math.min(byStock, presentation.closedStock) : byStock;
 }
 
 export function PosScreen({
@@ -183,6 +195,11 @@ export function PosScreen({
     const perUnit = presentation?.unitsPerPresentation ?? 1;
     if (unitsInCart(cart, product.id) + perUnit > product.currentStock) return false;
     const key = lineKey(product.id, presentation?.id ?? null);
+    if (presentation) {
+      const alreadyInCart =
+        cart.find((line) => lineKey(line.id, line.presentationId) === key)?.quantity ?? 0;
+      if (alreadyInCart + 1 > presentation.closedStock) return false;
+    }
     setCart((current) => {
       const existing = current.find((line) => lineKey(line.id, line.presentationId) === key);
       if (existing)
@@ -200,9 +217,7 @@ export function PosScreen({
   }
   function changeQuantity(line: CartLine, delta: number) {
     const key = lineKey(line.id, line.presentationId);
-    const maxQuantity = Math.floor(
-      (line.currentStock - unitsInCart(cart, line.id, [key])) / lineUnitsPer(line),
-    );
+    const maxQuantity = maxQuantityFor(line, cart);
     setCart((current) =>
       current
         .map((item) => {
@@ -226,9 +241,14 @@ export function PosScreen({
     const oldKey = lineKey(line.id, line.presentationId);
     const newKey = lineKey(line.id, presentationId);
     const others = unitsInCart(cart, line.id, [oldKey, newKey]);
-    const maxQuantity = Math.floor((line.currentStock - others) / perUnit);
+    const byStock = Math.floor((line.currentStock - others) / perUnit);
+    const maxQuantity = next ? Math.min(byStock, next.closedStock) : byStock;
     if (maxQuantity < 1) {
-      toast.error("No hay suficiente inventario para esa presentación.");
+      toast.error(
+        next
+          ? `No hay ${next.name.toLowerCase()} sin abrir para vender.`
+          : "No hay suficiente inventario para esa presentación.",
+      );
       return;
     }
     const target = cart.find((item) => lineKey(item.id, item.presentationId) === newKey);
@@ -363,16 +383,22 @@ export function PosScreen({
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={product.currentStock < presentation.unitsPerPresentation}
+                          disabled={
+                            presentation.closedStock < 1 ||
+                            product.currentStock < presentation.unitsPerPresentation
+                          }
                           onClick={() => {
                             if (!add(product, presentation.id))
                               toast.error(
-                                `No hay suficiente inventario para agregar ${presentation.name.toLowerCase()}.`,
+                                `No hay más ${presentation.name.toLowerCase()} sin abrir de este producto.`,
                               );
                           }}
                         >
                           <Plus /> {presentation.name} x{presentation.unitsPerPresentation} ·{" "}
                           {formatMoney(Number(presentation.salePrice))}
+                          <span className="text-xs font-normal text-muted-foreground">
+                            ({presentation.closedStock} sin abrir)
+                          </span>
                         </Button>
                       ))}
                     </div>
@@ -411,9 +437,7 @@ export function PosScreen({
                 const presentation = findPresentation(line.presentations, line.presentationId);
                 const unitCents = lineUnitCents(line);
                 const lineSubtotal = unitCents * line.quantity;
-                const maxQuantity = Math.floor(
-                  (line.currentStock - unitsInCart(cart, line.id, [key])) / lineUnitsPer(line),
-                );
+                const maxQuantity = maxQuantityFor(line, cart);
                 const options: { id: string | null; label: string }[] = [
                   { id: null, label: "Individual" },
                   ...line.presentations.map((item) => ({ id: item.id, label: item.name })),
@@ -496,6 +520,12 @@ export function PosScreen({
                               (line.presentationId ?? null) === option.id ? "secondary" : "outline"
                             }
                             aria-pressed={(line.presentationId ?? null) === option.id}
+                            disabled={
+                              option.id !== null &&
+                              (line.presentationId ?? null) !== option.id &&
+                              (findPresentation(line.presentations, option.id)?.closedStock ?? 0) <
+                                1
+                            }
                             className="h-7 px-2 text-xs"
                             onClick={() => changePresentation(line, option.id)}
                           >

@@ -56,6 +56,7 @@ type Product = {
     unitsPerPresentation: number;
     salePrice: string;
     barcode: string | null;
+    closedStock: number;
   }[];
 };
 
