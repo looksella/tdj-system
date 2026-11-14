@@ -32,7 +32,17 @@ export default async function PurchasesPage() {
       where: { isActive: true },
       orderBy: { name: "asc" },
       take: 1200,
-      select: { id: true, sku: true, name: true, purchasePrice: true },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        purchasePrice: true,
+        presentations: {
+          where: { isActive: true },
+          orderBy: { unitsPerPresentation: "asc" },
+          select: { id: true, name: true, unitsPerPresentation: true },
+        },
+      },
     }),
     db.categoria.findMany({
       orderBy: { categoryName: "asc" },
@@ -48,6 +58,11 @@ export default async function PurchasesPage() {
     ...product,
     purchasePrice: product.purchasePrice.toString(),
   }));
+  const presentationIdByKey = new Map(
+    products.flatMap((product) =>
+      product.presentations.map((item) => [`${product.id}|${item.name}`, item.id] as const),
+    ),
+  );
   return (
     <div className="space-y-7">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -138,11 +153,36 @@ export default async function PurchasesPage() {
                     reference: purchase.reference,
                     note: purchase.note,
                     purchasedAt: purchase.purchasedAt.toISOString(),
-                    lines: purchase.lines.map((line) => ({
-                      productId: line.productId,
-                      quantity: line.quantity,
-                      unitCost: line.unitCost.toString(),
-                    })),
+                    lines: purchase.lines.map((line) => {
+                      if (line.presentationName && line.presentationQty) {
+                        const presentationId =
+                          presentationIdByKey.get(`${line.productId}|${line.presentationName}`) ??
+                          null;
+                        if (presentationId) {
+                          return {
+                            productId: line.productId,
+                            presentationId,
+                            quantity: line.presentationQty,
+                            unitCost: line.unitCost.toString(),
+                          };
+                        }
+                        // La presentación ya no existe: se muestra como unidades.
+                        return {
+                          productId: line.productId,
+                          presentationId: null,
+                          quantity: line.quantity,
+                          unitCost: (
+                            line.unitCost.toNumber() / (line.unitsPerPresentation ?? 1)
+                          ).toFixed(4),
+                        };
+                      }
+                      return {
+                        productId: line.productId,
+                        presentationId: null,
+                        quantity: line.quantity,
+                        unitCost: line.unitCost.toString(),
+                      };
+                    }),
                   };
                   return (
                     <TableRow key={purchase.id}>
@@ -157,7 +197,11 @@ export default async function PurchasesPage() {
                       <TableCell className="max-w-80">
                         <p className="truncate text-sm">
                           {purchase.lines
-                            .map((line) => `${line.quantity} × ${line.product.name}`)
+                            .map((line) =>
+                              line.presentationName && line.presentationQty
+                                ? `${line.presentationQty} × ${line.presentationName} de ${line.product.name}`
+                                : `${line.quantity} × ${line.product.name}`,
+                            )
                             .join(", ")}
                         </p>
                       </TableCell>

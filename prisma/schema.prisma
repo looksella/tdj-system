@@ -192,6 +192,9 @@ model LineaCompra {
   updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
   purchase   Compra   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   product    Producto @relation(fields: [productId], references: [id], onDelete: Restrict)
+  presentationName     String? @map("presentation_name")
+  presentationQty      Int?    @map("presentation_qty")
+  unitsPerPresentation Int?    @map("units_per_presentation")
 
   @@index([purchaseId])
   @@index([productId])

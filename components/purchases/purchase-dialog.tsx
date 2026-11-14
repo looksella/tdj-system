@@ -16,7 +16,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createProduct, createPurchase, updatePurchase } from "@/lib/actions/commerce";
 import { formatMoney } from "@/lib/locale";
-type Product = { id: string; sku: string; name: string; purchasePrice: string };
+type ProductPresentation = { id: string; name: string; unitsPerPresentation: number };
+type Product = {
+  id: string;
+  sku: string;
+  name: string;
+  purchasePrice: string;
+  presentations: ProductPresentation[];
+};
 type Category = { id: string; categoryName: string };
 type Purchase = {
   id: string;
@@ -24,13 +31,29 @@ type Purchase = {
   reference: string | null;
   note: string | null;
   purchasedAt: string;
-  lines: Array<{ productId: string; quantity: number; unitCost: string }>;
+  lines: Array<{
+    productId: string;
+    presentationId: string | null;
+    quantity: number;
+    unitCost: string;
+  }>;
 };
-type DraftLine = { productId: string; quantity: number; unitCost: number };
+/** Si `presentationId` existe, `quantity` cuenta presentaciones y `unitCost` es el de UNA presentación. */
+type DraftLine = {
+  productId: string;
+  presentationId: string | null;
+  quantity: number;
+  unitCost: number;
+};
 function defaultLine(product: Product | undefined): DraftLine {
   return product
-    ? { productId: product.id, quantity: 1, unitCost: Number(product.purchasePrice) }
-    : { productId: "", quantity: 1, unitCost: 0 };
+    ? {
+        productId: product.id,
+        presentationId: null,
+        quantity: 1,
+        unitCost: Number(product.purchasePrice),
+      }
+    : { productId: "", presentationId: null, quantity: 1, unitCost: 0 };
 }
 export function PurchaseDialog({
   products,
@@ -87,7 +110,25 @@ export function PurchaseDialog({
   }
   function chooseProduct(index: number, productId: string) {
     const product = catalog.find((item) => item.id === productId);
-    changeLine(index, { productId, unitCost: Number(product?.purchasePrice ?? 0) });
+    changeLine(index, {
+      productId,
+      presentationId: null,
+      unitCost: Number(product?.purchasePrice ?? 0),
+    });
+  }
+  function choosePresentation(index: number, presentationId: string | null) {
+    const line = lines[index];
+    const product = catalog.find((item) => item.id === line?.productId);
+    if (!line || !product) return;
+    const presentation = product.presentations.find((item) => item.id === presentationId);
+    const unitCost = Number(product.purchasePrice);
+    changeLine(index, {
+      presentationId: presentation ? presentation.id : null,
+      // Sugerencia: costo por unidad × unidades que trae. Se puede cambiar.
+      unitCost: presentation
+        ? Number((unitCost * presentation.unitsPerPresentation).toFixed(2))
+        : unitCost,
+    });
   }
   function openNewProduct() {
     const lastLine = lines[lines.length - 1];
@@ -137,10 +178,15 @@ export function PurchaseDialog({
         return;
       }
       const created = result.product;
-      setCatalog((current) => [...current, created]);
+      setCatalog((current) => [...current, { ...created, presentations: [] }]);
       setLines((current) => [
         ...current,
-        { productId: created.id, quantity: 1, unitCost: Number(created.purchasePrice) },
+        {
+          productId: created.id,
+          presentationId: null,
+          quantity: 1,
+          unitCost: Number(created.purchasePrice),
+        },
       ]);
       setNewProductOpen(false);
       toast.success(`${result.message} Ya quedó agregado a la compra.`);
@@ -202,8 +248,8 @@ export function PurchaseDialog({
             {editing ? "Editar compra" : "Nueva compra"}
           </DialogTitle>
           <DialogDescription>
-            Al guardar, las unidades se suman al inventario. Si corriges la compra, las existencias
-            se ajustan por la diferencia.
+            Al guardar, las unidades se suman al inventario. Si compras cajas o paquetes, entran sin
+            abrir. Si corriges la compra, las existencias se ajustan por la diferencia.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-5">
@@ -254,7 +300,8 @@ export function PurchaseDialog({
               <div>
                 <p className="font-semibold">Productos recibidos</p>
                 <p className="text-xs text-muted-foreground">
-                  Cada renglón suma unidades al inventario.
+                  Cada renglón suma unidades al inventario. Elige la presentación si compraste cajas
+                  o paquetes.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -395,69 +442,110 @@ export function PurchaseDialog({
                   Todavía no hay productos en inventario. Crea el primero con “Nuevo producto”.
                 </p>
               )}
-              {lines.map((line, index) => (
-                <div
-                  key={`${line.productId}-${index}`}
-                  className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_92px_120px_92px_36px] sm:items-end"
-                >
-                  <div className="space-y-1">
-                    <Label className="text-xs">Producto</Label>
-                    <select
-                      value={line.productId}
-                      onChange={(event) => chooseProduct(index, event.target.value)}
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    >
-                      {catalog.map((product) => (
-                        <option key={product.id} value={product.id}>
-                          {product.sku} · {product.name}
-                        </option>
-                      ))}
-                    </select>
+              {lines.map((line, index) => {
+                const product = catalog.find((item) => item.id === line.productId);
+                const presentation =
+                  product?.presentations.find((item) => item.id === line.presentationId) ?? null;
+                const units = presentation
+                  ? line.quantity * presentation.unitsPerPresentation
+                  : line.quantity;
+                return (
+                  <div key={`${line.productId}-${index}`} className="space-y-1">
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_92px_120px_92px_36px] sm:items-end">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Producto</Label>
+                        <select
+                          value={line.productId}
+                          onChange={(event) => chooseProduct(index, event.target.value)}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {catalog.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.sku} · {product.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Presentación</Label>
+                        {product && product.presentations.length > 0 ? (
+                          <select
+                            value={line.presentationId ?? ""}
+                            onChange={(event) =>
+                              choosePresentation(index, event.target.value || null)
+                            }
+                            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          >
+                            <option value="">Unidad</option>
+                            {product.presentations.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name} x{item.unitsPerPresentation}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="pb-2 text-sm text-muted-foreground">Unidad</p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Cantidad</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={line.quantity}
+                          onChange={(event) =>
+                            changeLine(index, { quantity: Number(event.target.value) })
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">
+                          {presentation
+                            ? `Costo por ${presentation.name.toLowerCase()}`
+                            : "Costo unitario"}
+                        </Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.unitCost}
+                          onChange={(event) =>
+                            changeLine(index, { unitCost: Number(event.target.value) })
+                          }
+                          required
+                        />
+                      </div>
+                      <p className="pb-2 text-right text-sm font-semibold tabular-nums">
+                        {formatMoney(line.quantity * line.unitCost)}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="mb-0.5"
+                        disabled={lines.length === 1}
+                        onClick={() =>
+                          setLines((current) =>
+                            current.filter((_, lineIndex) => lineIndex !== index),
+                          )
+                        }
+                        aria-label="Quitar producto"
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                    {presentation && (
+                      <p className="text-xs text-muted-foreground">
+                        Suma {units} unidades ({line.quantity} {presentation.name.toLowerCase()} sin
+                        abrir) · cada unidad sale a{" "}
+                        {formatMoney(line.unitCost / presentation.unitsPerPresentation)}.
+                      </p>
+                    )}
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Cantidad</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={line.quantity}
-                      onChange={(event) =>
-                        changeLine(index, { quantity: Number(event.target.value) })
-                      }
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Costo unitario</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={line.unitCost}
-                      onChange={(event) =>
-                        changeLine(index, { unitCost: Number(event.target.value) })
-                      }
-                      required
-                    />
-                  </div>
-                  <p className="pb-2 text-right text-sm font-semibold tabular-nums">
-                    {formatMoney(line.quantity * line.unitCost)}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="mb-0.5"
-                    disabled={lines.length === 1}
-                    onClick={() =>
-                      setLines((current) => current.filter((_, lineIndex) => lineIndex !== index))
-                    }
-                    aria-label="Quitar producto"
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="flex justify-end border-t border-border bg-muted/40 px-4 py-3">
               <p className="text-sm text-muted-foreground">
